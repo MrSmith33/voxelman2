@@ -1,0 +1,33 @@
+name: CI
+on:
+  push: # test + build + release
+    branches: [ master ]
+  pull_request: # test + build
+    branches: [ master ]
+  release: # test + build + release
+    types: [ published ]
+env:
+  DC: ldc-1.25.1
+
+jobs:
+  test:
+    name: Test
+    strategy:
+      matrix:
+        os: [windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ${{ env.DC }}
+      - name: Print env
+        shell: bash
+        run: echo '${{toJSON(github)}}'
+      - name: Test
+        shell: cmd
+        run: |
+          set LINKFLAGS=-L/ignore:4286 -L/ignore:4204 -L/NODEFAULTLIB:MSVCRT -L/LTCG
+          set LIBS=lib/liblz4_static.lib lib/glfw3_mt.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib
+          set DEPS=-I=vox/source
+          ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
