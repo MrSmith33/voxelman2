@@ -1,0 +1,42 @@
+void ExitProcess(u32 uExitCode);
+u64 GetTickCount64();
+void QueryPerformanceCounter(i64* performanceCount);
+void QueryPerformanceFrequency(i64* frequency);
+
+bool SetConsoleOutputCP(u32);
+
+u8 WriteConsoleA(
+	void* hConsoleOutput,
+	u8* lpBuffer,
+	u32 nNumberOfCharsToWrite,
+	u32* lpNumberOfCharsWritten,
+	void* lpReserved
+);
+
+bool WriteFile(
+	void* hFile,
+	u8* lpBuffer,
+	u32 nNumberOfCharsToWrite,
+	u32* lpNumberOfCharsWritten,
+	void* lpOverlapped
+);
+
+void* GetStdHandle(u32 nStdHandle);
+
+enum : u32 {
+	STD_INPUT_HANDLE  = 0xFFFFFFF6,
+	STD_OUTPUT_HANDLE = 0xFFFFFFF5,
+	STD_ERROR_HANDLE  = 0xFFFFFFF4
+}
+
+alias HANDLE = void*;
+HANDLE GetProcessHeap();
+void* HeapAlloc(HANDLE heap, u32 flags, u64 bytes);
+bool HeapFree(HANDLE heap, u32 flags, void* mem);
+void RtlCopyMemory(void* destination, void* source, u64 length);
+
+enum : u32 {
+	HEAP_GENERATE_EXCEPTIONS = 0x00000004,
+	HEAP_NO_SERIALIZE = 0x00000001,
+	HEAP_ZERO_MEMORY = 0x00000008,
+}

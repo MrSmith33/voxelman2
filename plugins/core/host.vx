@@ -1,0 +1,3 @@
+/// Host function bindings
+
+void host_print(u8[] str);
