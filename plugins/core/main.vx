@@ -6,10 +6,6 @@ import utils;
 void run()
 {
 	println("Start");
-	if (!glfwInit()) {
-		println("GLFW init failed");
-		return;
-	}
 
 	MDBX_env* env;
 	u8[] path = "test.db";
@@ -25,6 +21,11 @@ void run()
 		//rwx_rwx_rwx
 		0b110_110_110);
 	mdbx_env_close_ex(env);
+
+	if (!glfwInit()) {
+		println("GLFW init failed");
+		return;
+	}
 
 	glfwTerminate();
 	println("Shutdown");

@@ -1,0 +1,13 @@
+module deps.kernel32;
+extern(C) void ExitProcess();
+extern(C) void GetProcessHeap();
+extern(C) void GetStdHandle();
+extern(C) void GetTickCount64();
+extern(C) void HeapAlloc();
+extern(C) void HeapFree();
+extern(C) void QueryPerformanceCounter();
+extern(C) void QueryPerformanceFrequency();
+extern(C) void RtlCopyMemory();
+extern(C) void SetConsoleOutputCP();
+extern(C) void WriteConsoleA();
+extern(C) void WriteFile();

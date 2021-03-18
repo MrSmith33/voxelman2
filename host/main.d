@@ -1,5 +1,6 @@
 import std.string : toStringz;
 import std.stdio;
+import std.traits : isFunction;
 import all;
 
 void main() {
@@ -41,7 +42,7 @@ void main() {
 
 void regModules(ref Driver driver)
 {
-	driver.addHostSymbols(expose_symbols());
+	registerHostSymbols(driver);
 	driver.addModule(SourceFileInfo("../plugins/core/glfw3.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/kernel32.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/lz4.vx"));
@@ -52,68 +53,44 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
 }
 
-HostSymbol[] expose_symbols() {
-	HostSymbol[] hostSymbols;
+void registerHostSymbols(ref Driver driver)
+{
+	void regHostModule(alias Module)(string hostModuleName)
+	{
+		ObjectModule hostModule = {
+			kind : ObjectModuleKind.isHost,
+			id : driver.context.idMap.getOrRegNoDup(&driver.context, hostModuleName)
+		};
+		LinkIndex hostModuleIndex = driver.context.objSymTab.addModule(hostModule);
 
-	hostSymbols ~= HostSymbol("host_print", cast(void*)&host_print);
+		foreach(m; __traits(allMembers, Module))
+		{
+			alias member = __traits(getMember, Module, m);
+			static if (isFunction!member) { // only pickup functions
+				//writefln("reg %s %s", hostModuleName, m);
+				driver.addHostSymbol(hostModuleIndex, HostSymbol(m, cast(void*)&member));
+			}
+		}
+	}
 
-	hostSymbols ~= HostSymbol("mdbx_env_create", cast(void*)&mdbx_env_create);
-	hostSymbols ~= HostSymbol("mdbx_env_open", cast(void*)&mdbx_env_open);
-	hostSymbols ~= HostSymbol("mdbx_env_close_ex", cast(void*)&mdbx_env_close_ex);
+	import deps.glfw3;
+	import deps.enet;
+	import deps.lz4;
+	import deps.mdbx;
+	import deps.kernel32;
 
-	hostSymbols ~= HostSymbol("glfwInit", cast(void*)&glfwInit);
-	hostSymbols ~= HostSymbol("glfwTerminate", cast(void*)&glfwTerminate);
+	regHostModule!(deps.glfw3)("glfw3");
+	regHostModule!(deps.enet)("enet");
+	regHostModule!(deps.lz4)("lz4");
+	regHostModule!(deps.mdbx)("mdbx");
+	regHostModule!(deps.kernel32)("kernel32");
 
-	hostSymbols ~= HostSymbol("enet_initialize", cast(void*)&enet_initialize);
-
-	hostSymbols ~= HostSymbol("LZ4_compress_default", cast(void*)&LZ4_compress_default);
-	hostSymbols ~= HostSymbol("LZ4_decompress_safe", cast(void*)&LZ4_decompress_safe);
-
-	hostSymbols ~= HostSymbol("ExitProcess", cast(void*)&ExitProcess);
-	hostSymbols ~= HostSymbol("GetTickCount64", cast(void*)&GetTickCount64);
-	hostSymbols ~= HostSymbol("QueryPerformanceCounter", cast(void*)&QueryPerformanceCounter);
-	hostSymbols ~= HostSymbol("QueryPerformanceFrequency", cast(void*)&QueryPerformanceFrequency);
-	hostSymbols ~= HostSymbol("WriteConsoleA", cast(void*)&WriteConsoleA);
-	hostSymbols ~= HostSymbol("GetStdHandle", cast(void*)&GetStdHandle);
-	hostSymbols ~= HostSymbol("GetProcessHeap", cast(void*)&GetProcessHeap);
-	hostSymbols ~= HostSymbol("HeapAlloc", cast(void*)&HeapAlloc);
-	hostSymbols ~= HostSymbol("HeapFree", cast(void*)&HeapFree);
-	hostSymbols ~= HostSymbol("RtlCopyMemory", cast(void*)&RtlCopyMemory);
-	hostSymbols ~= HostSymbol("WriteFile", cast(void*)&WriteFile);
-	hostSymbols ~= HostSymbol("SetConsoleOutputCP", cast(void*)&SetConsoleOutputCP);
-
-	return hostSymbols;
+	LinkIndex hostModuleIndex = driver.getOrCreateHostModuleIndex();
+	driver.addHostSymbol(hostModuleIndex, HostSymbol("host_print", cast(void*)&host_print));
 }
 
 extern(C) void host_print(SliceString str) {
 	write(str.slice);
 }
 
-extern(C) nothrow {
-	void LZ4_compress_default();
-	void LZ4_decompress_safe();
-}
-
-extern(C) {
-	void enet_initialize();
-
-	void glfwInit();
-	void glfwTerminate();
-
-	void mdbx_env_create();
-	void mdbx_env_open();
-	void mdbx_env_close_ex();
-
-	void ExitProcess();
-	void GetTickCount64();
-	void QueryPerformanceCounter();
-	void QueryPerformanceFrequency();
-	void WriteConsoleA();
-	void GetStdHandle();
-	void GetProcessHeap();
-	void HeapAlloc();
-	void HeapFree();
-	void RtlCopyMemory();
-	void WriteFile();
-	bool SetConsoleOutputCP(uint);
-}
+extern(C) bool SetConsoleOutputCP(uint);

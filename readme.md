@@ -6,7 +6,7 @@
 
 `.lib` files must be placed into `repo_root/lib/` directory
 
-Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/tag/deps
+Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.zip
 
 Or build/download them yourself:
 
