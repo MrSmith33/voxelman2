@@ -8,13 +8,13 @@
 
 Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/tag/deps
 
-Or build them yourself:
+Or build/download them yourself:
 
-* GLFW3: `glfw-3.3.3.bin.WIN64.zip\glfw-3.3.3.bin.WIN64\lib-vc2019\glfw3_mt.lib`
-* Enet: `enet-1.3.17.tar.gz\enet-1.3.17.tar\enet-1.3.17\enet64.lib`
-* LZ4: `lz4-1.9.3.zip`, unpack and rebuild VS2017 project with VS2019 (Release config), then use `lz4-1.9.3\build\VS2017\bin\x64_Release\liblz4_static.lib`. The file from the release causes `liblz4_static.lib(lz4.o) : error LNK2001: unresolved external symbol ___chkstk_ms` when building with `ldc2`.
+* GLFW3: [glfw-3.3.3.bin.WIN64.zip](https://github.com/glfw/glfw/releases/download/3.3.3/glfw-3.3.3.bin.WIN64.zip)`/glfw-3.3.3.bin.WIN64/lib-vc2019/glfw3_mt.lib`
+* Enet: [enet-1.3.17.tar.gz](http://enet.bespin.org/download/enet-1.3.17.tar.gz)`/enet-1.3.17.tar/enet-1.3.17/enet64.lib`
+* LZ4: [lz4-1.9.3.zip](https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip), unpack and rebuild VS2017 project with VS2019 (Release config), then use `lz4-1.9.3\build\VS2017\bin\x64_Release\liblz4_static.lib`. The file from the release causes `liblz4_static.lib(lz4.o) : error LNK2001: unresolved external symbol ___chkstk_ms` when building with `ldc2`.
 * libmdbx:
-   * Create `build.cmd` inside `libmdbx_0_9_3/` unpacked from `libmdbx-amalgamated-0_9_3.zip`:
+   * Create `build.cmd` inside `libmdbx_0_9_3/` unpacked from [libmdbx-amalgamated-0_9_3.zip](https://github.com/erthink/libmdbx/releases/download/v0.9.3/libmdbx-amalgamated-0_9_3.zip):
    ```batch
    mkdir build
    cd build
