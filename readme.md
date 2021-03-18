@@ -4,7 +4,7 @@
 
 ## Getting deps:
 
-`.lib` files must be places into `repo_root/lib/` directory
+`.lib` files must be placed into `repo_root/lib/` directory
 
 Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/tag/deps
 
