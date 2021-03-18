@@ -1,8 +1,20 @@
 # Voxelman v2
 
-[Voxelman v1](https://github.com/MrSmith33/voxelman)
+Voxel engine focused on:
+- Modding via embedded Vox language compiler, which offers quick recompilation
+- High performance through the use of ECS, multithreading and Vulkan API, mdbx database
+- Client/Server architecture
 
-## Getting deps:
+## Status
+
+WIP rewrite of voxelman
+
+## Links
+
+* [Voxelman v1](https://github.com/MrSmith33/voxelman)
+* [Vox lang](https://github.com/MrSmith33/vox)
+
+## Getting deps
 
 `.lib` files must be placed into `repo_root/lib/` directory
 

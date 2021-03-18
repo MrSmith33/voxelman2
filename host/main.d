@@ -4,6 +4,7 @@ import std.traits : isFunction;
 import all;
 
 void main() {
+	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
 
 	Driver driver;
@@ -92,5 +93,3 @@ void registerHostSymbols(ref Driver driver)
 extern(C) void host_print(SliceString str) {
 	write(str.slice);
 }
-
-extern(C) bool SetConsoleOutputCP(uint);

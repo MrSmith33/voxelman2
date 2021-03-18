@@ -8,6 +8,6 @@ extern(C) void HeapFree();
 extern(C) void QueryPerformanceCounter();
 extern(C) void QueryPerformanceFrequency();
 extern(C) void RtlCopyMemory();
-extern(C) void SetConsoleOutputCP();
+extern(C) bool SetConsoleOutputCP(uint);
 extern(C) void WriteConsoleA();
 extern(C) void WriteFile();
