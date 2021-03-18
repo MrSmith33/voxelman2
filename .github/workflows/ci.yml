@@ -35,5 +35,5 @@ jobs:
         run: |
           set LINKFLAGS=-L/ignore:4286 -L/ignore:4204 -L/NODEFAULTLIB:MSVCRT -L/LTCG
           set LIBS=lib/liblz4_static.lib lib/glfw3_mt.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib
-          set DEPS=-I=vox/source
+          set DEPS=-I=vox/source host
           ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
