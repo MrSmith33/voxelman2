@@ -1,0 +1,302 @@
+import kernel32;
+import lz4;
+import host;
+
+i64 curMsecs() {
+	i64 counter;
+	QueryPerformanceCounter(&counter);
+	i64 freq;
+	QueryPerformanceFrequency(&freq);
+	return counter * 1000 / freq;
+}
+
+T min[T](T a, T b) #inline {
+	if (a < b) return a;
+	return b;
+}
+
+T max[T](T a, T b) #inline {
+	if (a > b) return a;
+	return b;
+}
+
+i32 abs(i32 a) #inline {
+	if (a < 0) return -a;
+	return a;
+}
+
+T[] makeArray[T](u64 length)
+{
+	import kernel32;
+	T* ptr = cast(T*)HeapAlloc(GetProcessHeap(), 0, length * T.sizeof);
+	return ptr[0..length];
+}
+
+void freeArray[T](T[] array)
+{
+	import kernel32;
+	if (array.ptr == null) return;
+	HeapFree(GetProcessHeap(), 0, cast(void*)array.ptr);
+}
+
+#if(0)
+{
+	void memcopy(u8[] dst, u8[] src)
+	{
+		u64 len = min[u64](dst.length, src.length);
+		if (len == 0) return;
+		u8* dst_ptr = dst.ptr;
+		u8* src_ptr = src.ptr;
+		for (u64 i = 0; i < len; ++i)
+			dst_ptr[i] = src_ptr[i];
+	}
+}
+else
+{
+	void memcopy(u8[] dst, u8[] src)
+	{
+		u64 len = min[u64](dst.length, src.length);
+		if (len == 0) return;
+		RtlCopyMemory(cast(void*)dst.ptr, cast(void*)src.ptr, len);
+	}
+}
+
+struct Array[T]
+{
+	T* bufPtr;
+	u32 length;
+	u32 capacity;
+
+	void free()
+	{
+		freeArray[T](bufPtr[0..length]);
+	}
+
+	void clear()
+	{
+		length = 0;
+	}
+
+	bool empty() { return length == 0; }
+
+	T* get(u64 index) {
+		return &bufPtr[index];
+	}
+
+	T pop() {
+		--length;
+		return bufPtr[length];
+	}
+
+	T[] data()
+	{
+		return bufPtr[0..length];
+	}
+
+	void put(T item)
+	{
+		if (length == capacity) extend(1);
+		bufPtr[length] = item;
+		++length;
+	}
+
+	T* putVoid(u32 numItems)
+	{
+		if (length == capacity) extend(numItems);
+		T* result = &bufPtr[length];
+		length += numItems;
+		return result;
+	}
+
+	void extend(u32 items)
+	{
+		enum u32 MIN_CAPACITY = T.sizeof * 4;
+		u64 bytesNeeded = (length + items) * T.sizeof;
+		u32 capacityNeeded = cast(u32)nextPOT[u32](cast(u32)bytesNeeded);
+		capacityNeeded = max[u32](capacityNeeded, MIN_CAPACITY);
+		HANDLE heap = GetProcessHeap();
+		u8* newBlock = cast(u8*)HeapAlloc(heap, 0, capacityNeeded);
+		memcopy(newBlock[0..length * T.sizeof], (cast(u8*)bufPtr)[0..length * T.sizeof]);
+		HeapFree(heap, 0, cast(void*)bufPtr);
+		bufPtr = cast(T*)newBlock;
+		capacity = cast(u32)(capacityNeeded / T.sizeof);
+	}
+}
+
+T nextPOT[T](T x)
+{
+	--x;
+	x |= x >> 1;  // handle  2 bit numbers
+	x |= x >> 2;  // handle  4 bit numbers
+	x |= x >> 4;  // handle  8 bit numbers
+	#if (T.sizeof >= 2) x |= x >> 8;  // handle 16 bit numbers
+	#if (T.sizeof >= 4) x |= x >> 16; // handle 32 bit numbers
+	#if (T.sizeof >= 8) x |= x >> 32; // handle 64 bit numbers
+	++x;
+
+	return x;
+}
+
+void printString(u8[] str) {
+	void* handle = GetStdHandle(STD_OUTPUT_HANDLE);
+	//SetConsoleOutputCP(65001);
+	u32 numWritten;
+	WriteFile(
+		handle,
+		str.ptr,
+		cast(u32)str.length,
+		&numWritten,
+		null);
+}
+
+$alias selectPrintFunc($type T) {
+	if ($isInteger(T))
+		return printInt;
+	if ($isSlice(T))
+		return printString;
+	$compileError("Invalid type");
+}
+
+void print[Args...](Args... args) {
+	#foreach(i, arg; args) {
+		alias func = selectPrintFunc(Args[i]);
+		func(arg);
+	}
+}
+
+void println[Args...](Args... args) {
+	#foreach(i, arg; args) {
+		alias func = selectPrintFunc(Args[i]);
+		func(arg);
+	}
+	printString("\n");
+}
+
+void printArray[T](T[] array)
+{
+	u64 len = array.length;
+	print("[");
+	for (u64 i = 0; i < len; ++i)
+	{
+		if (i > 0)
+			print(", ");
+		printInt(array[i]);
+	}
+	print("]");
+}
+
+void setRangeu8(u8[] slice, u8 value) {
+	for (u64 i = 0; i < slice.length; ++i) {
+		slice[i] = value;
+	}
+}
+
+void printInt(i64 i)
+{
+	u8[21] buf;
+	u8[] res = formatInt(i, &buf, 1);
+	print(res);
+}
+
+u8[] formatInt(i64 i, u8[21]* output, u32 minSize)
+{
+	u32 numDigits = 0;
+	if (i == 0)
+	{
+		if (minSize == 0)
+			minSize = 1;
+		setRangeu8((*output)[21 - minSize..21], ' ');
+		(*output)[20] = '0';
+		numDigits = minSize;
+	}
+	else
+	{
+		bool neg = i < 0;
+		if (neg) {
+			i = -i;
+		}
+		bool overflow = i < 0;
+		if (overflow)
+			i = i64.max;
+
+		while (i)
+		{
+			u8 c = cast(u8)('0' + i % 10);
+			(*output)[21 - ++numDigits] = c;
+			i /= 10;
+		}
+
+		while (numDigits < minSize) {
+			(*output)[21 - ++numDigits] = ' ';
+		}
+
+		if (neg) {
+			(*output)[21 - ++numDigits] = '-';
+		}
+		if (overflow) {
+			++(*output)[20];
+		}
+	}
+	return (*output)[21 - numDigits..21];
+}
+
+i64 cstrlen(u8* str) {
+	if (str == null) return 0;
+
+	u8* start = str;
+	while(*str)
+	{
+		++str;
+	}
+	return str - start;
+}
+
+//
+u64 rotl(u64 x, u32 k) #inline {
+	return (x << k) | (x >> (64 - k));
+}
+
+void init_rand_state(u64[2]* state) {
+	state[0][0] = GetTickCount64();
+	state[0][1] = 0xac32_ee10_a135_0e00;
+	xoroshiro128ss_next(state);
+	state[0][1] = GetTickCount64();
+}
+
+// xoroshiro128**
+// init state to random values before starting
+u64 xoroshiro128ss_next(u64[2]* state) {
+	u64 s0 = (*state)[0];
+	u64 s1 = (*state)[1];
+	u64 result = rotl(s0 * 5, 7) * 9;
+
+	s1 ^= s0;
+	(*state)[0] = rotl(s0, 24) ^ s1 ^ (s1 << 16); // a, b
+	(*state)[1] = rotl(s1, 37); // c
+
+	return result;
+}
+
+i64 uniform(i64 a, i64 b, u64[2]* state) // inclusive interval []
+{
+	i64 distance = b - a;
+	u64 rand_num = xoroshiro128ss_next(state);
+	i64 interval_pos = cast(i64)(rand_num % cast(u64)distance);
+	return a + interval_pos;
+}
+
+u8[] compress(u8[] data, u8[] outBuffer)
+{
+	i32 res = LZ4_compress_default(data.ptr, outBuffer.ptr, cast(i32)data.length, cast(i32)outBuffer.length);
+	return outBuffer[0..res];
+}
+u8[] decompress(u8[] data, u8[] outBuffer)
+{
+	i32 res = LZ4_decompress_safe(data.ptr, outBuffer.ptr, cast(i32)data.length, cast(i32)outBuffer.length);
+	//if (res < 0)
+	//{
+	//	//println("decompress failed with result ", res, " in ", cast(i64)data.length, " buf ", cast(i64)outBuffer.length);
+	//	return null;
+	//}
+	return outBuffer[0..res];
+}

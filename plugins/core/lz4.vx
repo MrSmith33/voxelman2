@@ -1,0 +1,2 @@
+i32 LZ4_compress_default(u8* source, u8* dest, i32 sourceSize, i32 maxDestSize);
+i32 LZ4_decompress_safe(u8* source, u8* dest, i32 compressedSize, i32 maxDecompressedSize);

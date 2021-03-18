@@ -1,0 +1,31 @@
+import glfw3;
+import enet;
+import mdbx;
+import utils;
+
+void run()
+{
+	println("Start");
+	if (!glfwInit()) {
+		println("GLFW init failed");
+		return;
+	}
+
+	MDBX_env* env;
+	u8[] path = "test.db";
+	mdbx_env_create(&env);
+
+	enet_initialize();
+
+	mdbx_env_open(
+		env,
+		path.ptr,
+		MDBX_env_flags_t.MDBX_NOSUBDIR |
+		MDBX_env_flags_t.MDBX_EXCLUSIVE,
+		//rwx_rwx_rwx
+		0b110_110_110);
+	mdbx_env_close_ex(env);
+
+	glfwTerminate();
+	println("Shutdown");
+}
