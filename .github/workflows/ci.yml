@@ -29,7 +29,7 @@ jobs:
       - name: Download libs
         run: |
           curl -OL https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.zip
-          7z e lib.zip
+          7z x lib.zip
       - name: Test
         shell: cmd
         run: |
