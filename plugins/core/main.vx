@@ -27,6 +27,13 @@ void run()
 		return;
 	}
 
+	if (!glfwVulkanSupported) {
+		println("Vulkan is not supported");
+		return;
+	}
+
+
+
 	glfwTerminate();
 	println("Shutdown");
 }

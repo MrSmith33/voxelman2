@@ -7,6 +7,7 @@ void main() {
 	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
 
+	auto startCompileTime = currTime;
 	Driver driver;
 	driver.initialize(jitPasses);
 	driver.context.buildType = BuildType.jit;
@@ -35,6 +36,8 @@ void main() {
 		throw e;
 	}
 	driver.markCodeAsExecutable();
+	auto endCompileTime = currTime;
+	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");
 
