@@ -12,6 +12,7 @@ void run()
 	mdbx_env_create(&env);
 
 	enet_initialize();
+	enet_deinitialize();
 
 	mdbx_env_open(
 		env,
@@ -32,7 +33,18 @@ void run()
 		return;
 	}
 
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", null, null);
 
+	//u32 extensionCount;
+	//vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
+	//println(extensionCount, " extensions supported");
+
+	while(!glfwWindowShouldClose(window)) {
+		glfwPollEvents();
+	}
+
+	glfwDestroyWindow(window);
 
 	glfwTerminate();
 	println("Shutdown");

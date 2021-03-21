@@ -1,1 +1,148 @@
+struct ENetHost;
+struct ENetPacket;
+struct ENetPeer;
+struct ENetAddress;
+
+alias ENetSocket = u64;
+alias ENetVersion = u32;
+
+alias ENetSocketType = i32;
+enum : ENetSocketType
+{
+	ENET_SOCKET_TYPE_STREAM   = 1,
+	ENET_SOCKET_TYPE_DATAGRAM = 2,
+}
+
+alias ENetEventType = i32;
+enum : ENetEventType
+{
+	ENET_EVENT_TYPE_NONE       = 0,
+	ENET_EVENT_TYPE_CONNECT    = 1,
+	ENET_EVENT_TYPE_DISCONNECT = 2,
+	ENET_EVENT_TYPE_RECEIVE    = 3,
+}
+
+alias ENetSocketOption = i32;
+enum : ENetSocketOption
+{
+	ENET_SOCKOPT_NONBLOCK  = 1,
+	ENET_SOCKOPT_BROADCAST = 2,
+	ENET_SOCKOPT_RCVBUF    = 3,
+	ENET_SOCKOPT_SNDBUF    = 4,
+	ENET_SOCKOPT_REUSEADDR = 5,
+	ENET_SOCKOPT_RCVTIMEO  = 6,
+	ENET_SOCKOPT_SNDTIMEO  = 7,
+	ENET_SOCKOPT_ERROR     = 8,
+}
+
+struct ENetEvent
+{
+	ENetEventType type;
+	ENetPeer*     peer;
+	u8            channelID;
+	u32           data;
+	ENetPacket*   packet;
+}
+
+struct ENetCallbacks
+{
+	void* function(u64 size) malloc;
+	void function(void* memory) free;
+	void function() no_memory;
+}
+
+struct ENetBuffer
+{
+	u64 dataLength;
+	void*  data;
+}
+
+alias ENetSocketShutdown = i32;
+enum : ENetSocketShutdown
+{
+	ENET_SOCKET_SHUTDOWN_READ       = 0,
+	ENET_SOCKET_SHUTDOWN_WRITE      = 1,
+	ENET_SOCKET_SHUTDOWN_READ_WRITE = 2
+}
+
+enum ENET_HOST_ANY       = 0;
+enum ENET_HOST_BROADCAST = 0xFFFFFFFF;
+enum ENET_PORT_ANY       = 0;
+
+enum FD_SETSIZE = 64;
+
+struct ENetSocketSet
+{
+	u32 fd_count;
+	ENetSocket[FD_SETSIZE] fd_array;
+}
+
+struct ENetCompressor
+{
+   void* context;
+   u64 function(void* context, ENetBuffer* inBuffers, u64 inBufferCount, u64 inLimit, u8* outData, u64 outLimit) compress;
+   u64 function(void* context, u8* inData, u64 inLimit, u8* outData, u64 outLimit) decompress;
+   void function(void* context) destroy;
+}
+
 i32 enet_initialize();
+i32 enet_initialize_with_callbacks(ENetVersion version_, ENetCallbacks* inits);
+void enet_deinitialize();
+ENetVersion enet_linked_version();
+
+u32 enet_crc32(ENetBuffer*, u64);
+
+u32 enet_time_get();
+void enet_time_set(u32);
+
+i32 enet_address_get_host(ENetAddress* address, u8* hostName, u64 nameLength);
+i32 enet_address_get_host_ip(ENetAddress* address, u8* hostName, u64 nameLength);
+i32 enet_address_set_host(ENetAddress* address, u8* hostName);
+i32 enet_address_set_host_ip(ENetAddress* address, u8* hostName);
+
+ENetHost* enet_host_create(ENetAddress* address, u64, u64, u32, u32);
+void enet_host_destroy(ENetHost*);
+void enet_host_bandwidth_limit(ENetHost*, u32, u32);
+void enet_host_broadcast(ENetHost*, u8, ENetPacket*);
+void enet_host_channel_limit(ENetHost*, u64);
+i32 enet_host_check_events(ENetHost*, ENetEvent*);
+void enet_host_compress(ENetHost*, ENetCompressor*);
+i32 enet_host_compress_with_range_coder(ENetHost* host);
+ENetPeer* enet_host_connect(ENetHost*, ENetAddress* address, u64, u32);
+void enet_host_flush(ENetHost*);
+i32 enet_host_service(ENetHost*, ENetEvent*, u32);
+
+ENetPacket* enet_packet_create(void*, u64, u32);
+void enet_packet_destroy(ENetPacket*);
+i32 enet_packet_resize (ENetPacket*, u64);
+
+void enet_peer_disconnect(ENetPeer*, u32);
+void enet_peer_disconnect_later(ENetPeer*, u32);
+void enet_peer_disconnect_now(ENetPeer*, u32);
+void enet_peer_ping(ENetPeer*);
+void enet_peer_ping_interval(ENetPeer*, u32);
+ENetPacket* enet_peer_receive(ENetPeer*, u8* channelID);
+void enet_peer_reset(ENetPeer*);
+i32 enet_peer_send(ENetPeer*, u8, ENetPacket*);
+void enet_peer_throttle_configure(ENetPeer*, u32, u32, u32);
+void enet_peer_timeout(ENetPeer*, u32, u32, u32);
+
+void* enet_range_coder_create();
+void enet_range_coder_destroy(void*);
+u64 enet_range_coder_compress(void*, ENetBuffer*, u64, u64, u8*, u64);
+u64 enet_range_coder_decompress(void*, u8*, u64, u8*, u64);
+
+i32 enet_socket_connect(ENetSocket, ENetAddress*);
+void enet_socket_destroy(ENetSocket);
+ENetSocket enet_socket_accept(ENetSocket, ENetAddress* address);
+i32 enet_socket_bind(ENetSocket, ENetAddress*);
+ENetSocket enet_socket_create(ENetSocketType);
+i32 enet_socket_get_address(ENetSocket, ENetAddress*);
+i32 enet_socket_get_option(ENetSocket, ENetSocketOption, i32*);
+i32 enet_socket_listen(ENetSocket, i32);
+i32 enet_socket_receive(ENetSocket, ENetAddress*, ENetBuffer*, u64);
+i32 enet_socket_send(ENetSocket, ENetAddress*, ENetBuffer*, u64);
+i32 enet_socket_set_option(ENetSocket, ENetSocketOption, i32);
+i32 enet_socket_shutdown(ENetSocket, ENetSocketShutdown);
+i32 enet_socket_wait(ENetSocket, u32*, u32);
+i32 enet_socketset_select(ENetSocket, ENetSocketSet*, ENetSocketSet*, u32);

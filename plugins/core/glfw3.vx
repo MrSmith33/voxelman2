@@ -426,6 +426,8 @@ GLFWvidmode* glfwGetVideoMode(GLFWmonitor*);
 void glfwSetGamma(GLFWmonitor*,f32);
 GLFWgammaramp glfwGetGammaRamp(GLFWmonitor*);
 void glfwSetGammaRamp(GLFWmonitor*,GLFWgammaramp*);
+void glfwDefaultWindowHints();
+void glfwWindowHint(i32,i32);
 GLFWwindow* glfwCreateWindow(i32,i32,u8*,GLFWmonitor*,GLFWwindow*);
 void glfwDestroyWindow(GLFWwindow*);
 i32 glfwWindowShouldClose(GLFWwindow*);
