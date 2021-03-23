@@ -5,47 +5,82 @@ import utils;
 
 void run()
 {
-	println("Start");
+	Client client;
+	client.run();
+}
 
-	MDBX_env* env;
-	u8[] path = "test.db";
-	mdbx_env_create(&env);
+struct Client
+{
+	GLFWwindow* window;
+	MDBX_env* mdbxEnv;
 
-	enet_initialize();
-	enet_deinitialize();
+	enum WIDTH = 800;
+	enum HEIGHT = 600;
 
-	mdbx_env_open(
-		env,
-		path.ptr,
-		MDBX_env_flags_t.MDBX_NOSUBDIR |
-		MDBX_env_flags_t.MDBX_EXCLUSIVE,
-		//rwx_rwx_rwx
-		0b110_110_110);
-	mdbx_env_close_ex(env);
+	bool isRunning = true;
 
-	if (!glfwInit()) {
-		println("GLFW init failed");
-		return;
+	void run()
+	{
+		println("Start");
+		init();
+		mainLoop();
+		free();
+		println("Shutdown");
 	}
 
-	if (!glfwVulkanSupported) {
-		println("Vulkan is not supported");
-		return;
+	void init()
+	{
+		initWindow();
+		initVulkan();
+
+		enet_initialize();
+
+		u8[] path = "test.db";
+		mdbx_env_create(&mdbxEnv);
+		mdbx_env_open(
+			mdbxEnv,
+			path.ptr,
+			MDBX_env_flags_t.MDBX_NOSUBDIR |
+			MDBX_env_flags_t.MDBX_EXCLUSIVE,
+			//rwx_rwx_rwx
+			0b110_110_110);
 	}
 
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow* window = glfwCreateWindow(800, 600, "Vulkan window", null, null);
+	void initWindow()
+	{
+		// Do not create OpenGL context
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-	//u32 extensionCount;
-	//vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
-	//println(extensionCount, " extensions supported");
-
-	while(!glfwWindowShouldClose(window)) {
-		glfwPollEvents();
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman", null, null);
 	}
 
-	glfwDestroyWindow(window);
+	void initVulkan()
+	{
+		if (!glfwVulkanSupported) {
+			println("Vulkan is not supported");
+			isRunning = false;
+			return;
+		}
 
-	glfwTerminate();
-	println("Shutdown");
+		//u32 extensionCount;
+		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
+		//println(extensionCount, " extensions supported");
+	}
+
+	void free()
+	{
+		mdbx_env_close_ex(mdbxEnv);
+
+		enet_deinitialize();
+
+		glfwDestroyWindow(window);
+		glfwTerminate();
+	}
+
+	void mainLoop()
+	{
+		while(isRunning && !glfwWindowShouldClose(window)) {
+			glfwPollEvents();
+		}
+	}
 }

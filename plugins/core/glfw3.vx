@@ -521,3 +521,14 @@ i32 glfwJoystickIsGamepad(i32);
 i32 glfwUpdateGamepadMappings(u8*);
 u8* glfwGetGamepadName(i32);
 i32 glfwGetGamepadState(i32,GLFWgamepadstate*);
+
+// Vulkan
+alias VkInstance = void*;
+alias VkPhysicalDevice = void*;
+alias VkResult = i32;
+struct VkAllocationCallbacks;
+struct VkSurfaceKHR;
+u8** glfwGetRequiredInstanceExtensions(u32*);
+GLFWvkproc glfwGetInstanceProcAddress(VkInstance,u8*);
+i32 glfwGetPhysicalDevicePresentationSupport(VkInstance,VkPhysicalDevice,u32);
+VkResult glfwCreateWindowSurface(VkInstance,GLFWwindow*,VkAllocationCallbacks*,VkSurfaceKHR*);
