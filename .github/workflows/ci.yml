@@ -7,7 +7,8 @@ on:
   release: # test + build + release
     types: [ published ]
 env:
-  DC: ldc-1.25.1
+  DC1: ldc-1.25.1
+  DC2: dmd-2.096.0
 
 jobs:
   test:
@@ -22,7 +23,10 @@ jobs:
           submodules: 'true'
       - uses: dlang-community/setup-dlang@v1
         with:
-          compiler: ${{ env.DC }}
+          compiler: ${{ env.DC1 }}
+      - uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ${{ env.DC2 }}
       - name: Print env
         shell: bash
         run: echo '${{toJSON(github)}}'
