@@ -9,14 +9,14 @@ on:
 env:
   DC1: ldc-1.25.1
   DC2: dmd-2.096.0
+  LINKFLAGS: -L/NODEFAULTLIB:libcmt -L/NODEFAULTLIB:libvcruntime
+  LIBS: lib/liblz4_static.lib lib/glfw3.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib msvcrt.lib
+  DEPS: -I=vox/source -I=host
 
 jobs:
-  test:
-    name: Test
-    strategy:
-      matrix:
-        os: [windows-latest]
-    runs-on: ${{ matrix.os }}
+  build-ldc-debug:
+    name: LDC debug
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
         with:
@@ -24,22 +24,45 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC1 }}
+      - name: Try build ldc debug
+        shell: cmd
+        run: |
+          curl -OL https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+          7z x lib.7z
+          ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+
+  build-ldc-release:
+    name: LDC release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'true'
+      - uses: dlang-community/setup-dlang@v1
+        with:
+          compiler: ${{ env.DC1 }}
+      - name: Try build release
+        shell: cmd
+        run: |
+          curl -OL https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+          7z x lib.7z
+          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+          
+  build-dmd:
+    name: DMD debug
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: 'true'
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC2 }}
-      - name: Print env
-        shell: bash
-        run: echo '${{toJSON(github)}}'
       - name: Download libs
         run: |
           curl -OL https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
           7z x lib.7z
-      - name: Test
+      - name: Try build
         shell: cmd
         run: |
-          set LINKFLAGS=-L/NODEFAULTLIB:libcmt -L/NODEFAULTLIB:libvcruntime
-          set LIBS=lib/liblz4_static.lib lib/glfw3.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib msvcrt.lib
-          set DEPS=-I=vox/source -I=host
-          ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
           dmd -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
-          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
