@@ -18,7 +18,7 @@ WIP rewrite of voxelman
 
 `.lib` files must be placed into `repo_root/lib/` directory
 
-Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.zip
+Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
 
 Or build/download them yourself:
 
@@ -27,14 +27,13 @@ Or build/download them yourself:
 * LZ4: [lz4-1.9.3.zip](https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip), unpack and rebuild VS2017 project with VS2019 (Release config), then use `lz4-1.9.3\build\VS2017\bin\x64_Release\liblz4_static.lib`. The file from the release causes `liblz4_static.lib(lz4.o) : error LNK2001: unresolved external symbol ___chkstk_ms` when building with `ldc2`.
 * libmdbx:
    * Create `build.cmd` inside `libmdbx_0_9_3/` unpacked from [libmdbx-amalgamated-0_9_3.zip](https://github.com/erthink/libmdbx/releases/download/v0.9.3/libmdbx-amalgamated-0_9_3.zip):
-   * In `libmdbx_0_9_3/cmake/compiler.cmake` replace `set(MSVC_LTO_AVAILABLE TRUE)` with `set(MSVC_LTO_AVAILABLE FALSE)` to prevent the use of `/LTCG`, which messes with lld linker.
    ```batch
    mkdir build
    cd build
-   cmake -G "Visual Studio 16 2019" -A x64 -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -D MDBX_AVOID_CRT:BOOL=ON -D MDBX_BUILD_SHARED_LIBRARY:BOOL=OFF ..
-   cmake --build . --config RelWithDebInfo
+   cmake -G "Visual Studio 16 2019" -A x64 -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -D MDBX_AVOID_CRT:BOOL=ON -D MDBX_BUILD_SHARED_LIBRARY:BOOL=OFF -D INTERPROCEDURAL_OPTIMIZATION:BOOL=FALSE ..
    ```
    * Needs `cmake` to be installed.
    * Run `build.cmd`.
-   * Copy `libmdbx_0_9_3\build\RelWithDebInfo\mdbx.lib`
-   * Optionally disable `.pdb` output by setting `C/C++->General->Debug information format` to `None` in the VS project and rebuild `mdbx-static` project inside VS.
+   * Change inlining option (Properties->C/C++->Optimization->Inline function expansion) in the `Release` config of `mdbx-static` project to `/Ob1`. Otherwise compile freezes.
+   * `cmake --build . --config Release` or press `Build` for `mdbx-static` project.
+   * Copy `libmdbx_0_9_3/build/Release/mdbx.lib`
