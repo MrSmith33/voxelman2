@@ -33,7 +33,8 @@ jobs:
       - name: Test
         shell: cmd
         run: |
-          set LINKFLAGS=-L/ignore:4286 -L/ignore:4204 -L/NODEFAULTLIB:MSVCRT -L/LTCG
-          set LIBS=lib/liblz4_static.lib lib/glfw3_mt.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib
+          set LINKFLAGS=-L/NODEFAULTLIB:libcmt -L/NODEFAULTLIB:libvcruntime
+          set LIBS=lib/liblz4_static.lib lib/glfw3.lib lib/enet64.lib lib/mdbx.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib msvcrt.lib
           set DEPS=-I=vox/source -I=host
           ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
