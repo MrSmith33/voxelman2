@@ -46,6 +46,23 @@ struct Client
 			0b110_110_110);
 	}
 
+	void free()
+	{
+		mdbx_env_close_ex(mdbxEnv);
+
+		enet_deinitialize();
+
+		glfwDestroyWindow(window);
+		glfwTerminate();
+	}
+
+	void mainLoop()
+	{
+		while(isRunning && !glfwWindowShouldClose(window)) {
+			glfwPollEvents();
+		}
+	}
+
 	void initWindow()
 	{
 		// Do not create OpenGL context
@@ -65,22 +82,5 @@ struct Client
 		//u32 extensionCount;
 		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
 		//println(extensionCount, " extensions supported");
-	}
-
-	void free()
-	{
-		mdbx_env_close_ex(mdbxEnv);
-
-		enet_deinitialize();
-
-		glfwDestroyWindow(window);
-		glfwTerminate();
-	}
-
-	void mainLoop()
-	{
-		while(isRunning && !glfwWindowShouldClose(window)) {
-			glfwPollEvents();
-		}
 	}
 }
