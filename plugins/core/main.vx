@@ -1,6 +1,7 @@
 import glfw3;
 import enet;
 import mdbx;
+import vulkan;
 import utils;
 
 void run()
@@ -65,6 +66,12 @@ struct Client
 
 	void initWindow()
 	{
+		if (!glfwInit()) {
+			println("GLFW init failed");
+			isRunning = false;
+			return;
+		}
+
 		// Do not create OpenGL context
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -79,8 +86,10 @@ struct Client
 			return;
 		}
 
-		//u32 extensionCount;
-		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
-		//println(extensionCount, " extensions supported");
+		loadGlobalLevelFunctions( cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr"));
+
+		u32 extensionCount;
+		vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
+		println(extensionCount, " extensions supported");
 	}
 }

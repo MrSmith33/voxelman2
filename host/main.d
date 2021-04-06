@@ -55,6 +55,7 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/host.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/main.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/vulkan.vx"));
 }
 
 void registerHostSymbols(ref Driver driver)
