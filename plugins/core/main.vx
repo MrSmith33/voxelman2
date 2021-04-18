@@ -1,7 +1,8 @@
 import glfw3;
 import enet;
 import mdbx;
-import vulkan;
+import vulkan.functions;
+import vulkan.types;
 import utils;
 
 void run()
@@ -14,6 +15,8 @@ struct Client
 {
 	GLFWwindow* window;
 	MDBX_env* mdbxEnv;
+
+	VkInstance instance;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;

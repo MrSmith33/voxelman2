@@ -1,6 +1,8 @@
 /// Port of https://github.com/BindBC/bindbc-glfw to Vox
 /// bindbc-glfw copyright Michael D. Parker 2018.
 
+import vulkan.types;
+
 enum {
 	GLFW_RELEASE = 0,
 	GLFW_PRESS = 1,
@@ -523,11 +525,6 @@ u8* glfwGetGamepadName(i32);
 i32 glfwGetGamepadState(i32,GLFWgamepadstate*);
 
 // Vulkan
-alias VkInstance = void*;
-alias VkPhysicalDevice = void*;
-alias VkResult = i32;
-struct VkAllocationCallbacks;
-struct VkSurfaceKHR;
 u8** glfwGetRequiredInstanceExtensions(u32*);
 GLFWvkproc glfwGetInstanceProcAddress(VkInstance,u8*);
 i32 glfwGetPhysicalDevicePresentationSupport(VkInstance,VkPhysicalDevice,u32);
