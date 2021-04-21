@@ -28,6 +28,7 @@ i32 abs(i32 a) #inline {
 T[] makeArray[T](u64 length)
 {
 	import kernel32;
+	if (length == 0) return null;
 	T* ptr = cast(T*)HeapAlloc(GetProcessHeap(), 0, length * T.sizeof);
 	return ptr[0..length];
 }
@@ -154,7 +155,9 @@ $alias selectPrintFunc($type T) {
 		return printInt;
 	if ($isSlice(T))
 		return printString;
-	$compileError("Invalid type");
+	if ($isPointer(T))
+		return printPtr;
+	$compileError("selectPrintFunc: Invalid type");
 }
 
 void print[Args...](Args... args) {
@@ -191,22 +194,29 @@ void setRangeu8(u8[] slice, u8 value) {
 	}
 }
 
-void printInt(i64 i)
+enum INT_BUF_SIZE = 66;
+void printInt(i64 i, u32 minSize = 1, u8 base = 10)
 {
-	u8[21] buf;
-	u8[] res = formatInt(i, &buf, 1);
+	u8[INT_BUF_SIZE] buf;
+	u8[] res = formatInt(i, &buf, 1, base);
 	print(res);
 }
 
-u8[] formatInt(i64 i, u8[21]* output, u32 minSize)
+void printPtr(void* ptr)
+{
+	printString("0x");
+	printInt(cast(i64)ptr, 16, 16);
+}
+
+u8[] formatInt(i64 i, u8[INT_BUF_SIZE]* output, u32 minSize, u8 base)
 {
 	u32 numDigits = 0;
 	if (i == 0)
 	{
 		if (minSize == 0)
 			minSize = 1;
-		setRangeu8((*output)[21 - minSize..21], ' ');
-		(*output)[20] = '0';
+		setRangeu8((*output)[INT_BUF_SIZE - minSize..INT_BUF_SIZE], ' ');
+		(*output)[INT_BUF_SIZE-1] = '0';
 		numDigits = minSize;
 	}
 	else
@@ -219,26 +229,35 @@ u8[] formatInt(i64 i, u8[21]* output, u32 minSize)
 		if (overflow)
 			i = i64.max;
 
-		while (i)
-		{
-			u8 c = cast(u8)('0' + i % 10);
-			(*output)[21 - ++numDigits] = c;
-			i /= 10;
+		if (base <= 10) {
+			while (i) {
+				u8 c = cast(u8)('0' + i % base);
+				(*output)[INT_BUF_SIZE - ++numDigits] = c;
+				i /= base;
+			}
+		} else {
+			while (i) {
+				u8 c = hexDigitsUpper[i % base];
+				(*output)[INT_BUF_SIZE - ++numDigits] = c;
+				i /= base;
+			}
 		}
 
 		while (numDigits < minSize) {
-			(*output)[21 - ++numDigits] = ' ';
+			(*output)[INT_BUF_SIZE - ++numDigits] = ' ';
 		}
 
 		if (neg) {
-			(*output)[21 - ++numDigits] = '-';
+			(*output)[INT_BUF_SIZE - ++numDigits] = '-';
 		}
 		if (overflow) {
-			++(*output)[20];
+			++(*output)[INT_BUF_SIZE-1];
 		}
 	}
-	return (*output)[21 - numDigits..21];
+	return (*output)[INT_BUF_SIZE - numDigits..INT_BUF_SIZE];
 }
+
+u8[] hexDigitsUpper = "0123456789ABCDEF";
 
 i64 cstrlen(u8* str) {
 	if (str == null) return 0;

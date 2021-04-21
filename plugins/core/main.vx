@@ -55,6 +55,7 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+		vkDestroyInstance(instance, null);
 
 		glfwDestroyWindow(window);
 		glfwTerminate();
@@ -91,8 +92,48 @@ struct Client
 
 		loadGlobalLevelFunctions( cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr"));
 
+		createInstance();
+	}
+
+	void createInstance()
+	{
+		VkApplicationInfo appInfo;
+		VkStructureType sType = cast(VkStructureType)VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO;
+		appInfo.pApplicationName = "Hello Triangle";
+		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+		appInfo.pEngineName = "Voxelman";
+		appInfo.engineVersion = VK_MAKE_VERSION(2, 0, 0);
+		appInfo.apiVersion = VK_API_VERSION_1_0;
+
+		VkInstanceCreateInfo createInfo;
+		createInfo.sType = cast(VkStructureType)VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+		createInfo.pApplicationInfo = &appInfo;
+
+		u32 glfwExtensionCount = 0;
+		u8** glfwExtensions;
+		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		createInfo.enabledExtensionCount = glfwExtensionCount;
+		createInfo.ppEnabledExtensionNames = glfwExtensions;
+
+		createInfo.enabledLayerCount = 0;
+
+		if (vkCreateInstance(&createInfo, null, &instance) != cast(VkResult)VK_SUCCESS) {
+			println("vkCreateInstance failed");
+			isRunning = false;
+			return;
+		}
+		//println("VkInstance ", cast(void*)instance);
+		loadInstanceLevelFunctions(instance);
+
 		u32 extensionCount;
 		vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
 		println(extensionCount, " extensions supported");
+		//VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
+		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
+		//for (i32 i; i < extensionCount; ++i) {
+		//	println(extensions[i].extensionName.ptr, " ", extensions[i].specVersion);
+		//}
+		//freeArray[VkExtensionProperties](extensions);
 	}
 }

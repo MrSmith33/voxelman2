@@ -1,0 +1,14 @@
+void* mi_malloc(u64 size);
+void* mi_calloc(u64 count, u64 size);
+void* mi_realloc(void* p, u64 newsize);
+void* mi_expand(void* p, u64 newsize);
+void mi_free(void* p);
+// Extended functionality
+void* mi_malloc_small(u64 size);
+void* mi_zalloc_small(u64 size);
+void* mi_zalloc(u64 size);
+void* mi_mallocn(u64 count, u64 size);
+void* mi_reallocn(void* p, u64 count, u64 size);
+void* mi_reallocf(void* p, u64 newsize);
+u64 mi_usable_size(void* p);
+u64 mi_good_size(u64 size);
