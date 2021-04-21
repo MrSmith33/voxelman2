@@ -37,3 +37,9 @@ Or build/download them yourself:
    * Change inlining option (Properties->C/C++->Optimization->Inline function expansion) in the `Release` config of `mdbx-static` project to `/Ob1`. Otherwise compile freezes.
    * `cmake --build . --config Release` or press `Build` for `mdbx-static` project.
    * Copy `libmdbx_0_9_3/build/Release/mdbx.lib`
+* mimalloc:
+   * https://github.com/microsoft/mimalloc/archive/refs/tags/v2.0.1.zip
+   * Use Release build
+   * In vs2019 modify `mimalloc` project settings:
+      - Disable debug info (`Debug Information format`: `/Zi` -> `None`)
+      - Compile as C language to reduce .lib size (from 1.5MB to 300KB) (`C/C++ -> Advanced -> Compile As`: `/TP` -> `/TC`)

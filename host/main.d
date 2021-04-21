@@ -26,6 +26,7 @@ void main() {
 		if (e.isICE) throw e;
 		writefln("Compile error:");
 		writeln(driver.context.errorSink.text);
+		writeln(e);
 		return;
 	} catch(Throwable e) {
 		auto func = driver.context.currentFunction;
@@ -80,17 +81,19 @@ void registerHostSymbols(ref Driver driver)
 		}
 	}
 
-	import deps.glfw3;
 	import deps.enet;
+	import deps.glfw3;
+	import deps.kernel32;
 	import deps.lz4;
 	import deps.mdbx;
-	import deps.kernel32;
+	import deps.mimalloc;
 
-	regHostModule!(deps.glfw3)("glfw3");
 	regHostModule!(deps.enet)("enet");
+	regHostModule!(deps.glfw3)("glfw3");
+	regHostModule!(deps.kernel32)("kernel32");
 	regHostModule!(deps.lz4)("lz4");
 	regHostModule!(deps.mdbx)("mdbx");
-	regHostModule!(deps.kernel32)("kernel32");
+	regHostModule!(deps.mimalloc)("mimalloc");
 
 	LinkIndex hostModuleIndex = driver.getOrCreateHostModuleIndex();
 	driver.addHostSymbol(hostModuleIndex, HostSymbol("host_print", cast(void*)&host_print));
