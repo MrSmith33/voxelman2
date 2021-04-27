@@ -4,12 +4,18 @@ import mdbx;
 import vulkan.functions;
 import vulkan.types;
 import utils;
+import tracy;
+import kernel32;
 
 void run()
 {
 	Client client;
 	client.run();
 }
+
+u8[] frame_name = "Frame";
+TracyLoc zone_loc1 = TracyLoc("glfwPollEvents", "update()", "main.vx", 83, 0x00AA00);
+TracyLoc zone_loc2 = TracyLoc("sleep(1)", "update()", "main.vx", 85, 0x00CC00);
 
 struct Client
 {
@@ -20,6 +26,8 @@ struct Client
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
+
+	bool enableValidationLayers = true;
 
 	bool isRunning = true;
 
@@ -64,8 +72,20 @@ struct Client
 	void mainLoop()
 	{
 		while(isRunning && !glfwWindowShouldClose(window)) {
-			glfwPollEvents();
+			___tracy_emit_frame_mark();
+
+			update();
 		}
+	}
+
+	void update()
+	{
+		TracyZoneCtx tracy_ctx1 = ___tracy_emit_zone_begin(&zone_loc1, 1);
+		glfwPollEvents();
+		___tracy_emit_zone_end(tracy_ctx1);
+		TracyZoneCtx tracy_ctx2 = ___tracy_emit_zone_begin(&zone_loc2, 1);
+		Sleep(1);
+		___tracy_emit_zone_end(tracy_ctx2);
 	}
 
 	void initWindow()
@@ -118,7 +138,7 @@ struct Client
 
 		createInfo.enabledLayerCount = 0;
 
-		if (vkCreateInstance(&createInfo, null, &instance) != cast(VkResult)VK_SUCCESS) {
+		if (vkCreateInstance(&createInfo, null, &instance) != VK_SUCCESS) {
 			println("vkCreateInstance failed");
 			isRunning = false;
 			return;
@@ -132,7 +152,7 @@ struct Client
 		//VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
 		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
 		//for (i32 i; i < extensionCount; ++i) {
-		//	println(extensions[i].extensionName.ptr, " ", extensions[i].specVersion);
+		//	println(fromStringz(extensions[i].extensionName.ptr), " ", extensions[i].specVersion);
 		//}
 		//freeArray[VkExtensionProperties](extensions);
 	}

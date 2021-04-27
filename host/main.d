@@ -2,6 +2,7 @@ import std.string : toStringz;
 import std.stdio;
 import std.traits : isFunction;
 import all;
+import deps.tracy;
 
 void main() {
 	import deps.kernel32 : SetConsoleOutputCP;
@@ -19,6 +20,8 @@ void main() {
 	// add files
 	regModules(driver);
 
+	static loc = TracyLoc("Compile", "main.d", "main.d", 42, 0xFF00FF);
+	auto tracy_ctx = ___tracy_emit_zone_begin(&loc, 1);
 	// compile
 	try {
 		driver.compile();
@@ -38,6 +41,7 @@ void main() {
 	}
 	driver.markCodeAsExecutable();
 	auto endCompileTime = currTime;
+	___tracy_emit_zone_end(tracy_ctx);
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");
@@ -55,6 +59,7 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/mdbx.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/host.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/main.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/tracy.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/vulkan/dispatch_device.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/vulkan/functions.vx"));
@@ -87,6 +92,7 @@ void registerHostSymbols(ref Driver driver)
 	import deps.lz4;
 	import deps.mdbx;
 	import deps.mimalloc;
+	import deps.tracy;
 
 	regHostModule!(deps.enet)("enet");
 	regHostModule!(deps.glfw3)("glfw3");
@@ -94,6 +100,7 @@ void registerHostSymbols(ref Driver driver)
 	regHostModule!(deps.lz4)("lz4");
 	regHostModule!(deps.mdbx)("mdbx");
 	regHostModule!(deps.mimalloc)("mimalloc");
+	regHostModule!(deps.tracy)("tracy");
 
 	LinkIndex hostModuleIndex = driver.getOrCreateHostModuleIndex();
 	driver.addHostSymbol(hostModuleIndex, HostSymbol("host_print", cast(void*)&host_print));

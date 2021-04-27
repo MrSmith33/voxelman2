@@ -24,9 +24,9 @@ Or build/download them yourself:
 
 * GLFW3: [glfw-3.3.3.bin.WIN64.zip](https://github.com/glfw/glfw/releases/download/3.3.3/glfw-3.3.3.bin.WIN64.zip)`/glfw-3.3.3.bin.WIN64/lib-vc2019/glfw3.lib`
 * Enet: [enet-1.3.17.tar.gz](http://enet.bespin.org/download/enet-1.3.17.tar.gz)`/enet-1.3.17.tar/enet-1.3.17/enet64.lib`
-* LZ4: [lz4-1.9.3.zip](https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip), unpack and rebuild VS2017 project with VS2019 (Release config), then use `lz4-1.9.3\build\VS2017\bin\x64_Release\liblz4_static.lib`. The file from the release causes `liblz4_static.lib(lz4.o) : error LNK2001: unresolved external symbol ___chkstk_ms` when building with `ldc2`. Optionally disable debug info (`Debug Information format`: `/Zi` -> `None`).
+* LZ4: [lz4-1.9.3.zip](https://github.com/lz4/lz4/releases/download/v1.9.3/lz4_win64_v1_9_3.zip), unpack and rebuild VS2017 project with VS2019 (Release config), then use `lz4/build/VS2017/bin/x64_Release/liblz4_static.lib`. The file from the release causes `liblz4_static.lib(lz4.o) : error LNK2001: unresolved external symbol ___chkstk_ms` when building with `ldc2`. Optionally disable debug info (`Debug Information format`: `/Zi` -> `None`).
 * libmdbx:
-   * Create `build.cmd` inside `libmdbx_0_9_3/` unpacked from [libmdbx-amalgamated-0_9_3.zip](https://github.com/erthink/libmdbx/releases/download/v0.9.3/libmdbx-amalgamated-0_9_3.zip):
+   * Create `build.cmd` inside `libmdbx/` unpacked from [libmdbx-amalgamated-0_9_3.zip](https://github.com/erthink/libmdbx/releases/download/v0.9.3/libmdbx-amalgamated-0_9_3.zip):
    ```batch
    mkdir build
    cd build
@@ -36,10 +36,18 @@ Or build/download them yourself:
    * Run `build.cmd`.
    * Change inlining option (Properties->C/C++->Optimization->Inline function expansion) in the `Release` config of `mdbx-static` project to `/Ob1`. Otherwise compile freezes.
    * `cmake --build . --config Release` or press `Build` for `mdbx-static` project.
-   * Copy `libmdbx_0_9_3/build/Release/mdbx.lib`
+   * Copy `libmdbx/build/Release/mdbx.lib`
 * mimalloc:
    * https://github.com/microsoft/mimalloc/archive/refs/tags/v2.0.1.zip
    * Use Release build
    * In vs2019 modify `mimalloc` project settings:
       - Disable debug info (`Debug Information format`: `/Zi` -> `None`)
       - Compile as C language to reduce .lib size (from 1.5MB to 300KB) (`C/C++ -> Advanced -> Compile As`: `/TP` -> `/TC`)
+   * Copy `mimalloc/out/msvc-x64/Release/mimalloc-static.lib`
+* Tracy:
+   * https://github.com/wolfpld/tracy/archive/refs/tags/v0.7.7.zip
+   * Open `/library/win32/TracyProfiler.sln`
+   * Use Release build
+   * `Whole program optimization`: `/GL` -> `No`
+   * `Debug Information format`: `/Zi` -> `None`
+   * Copy `tracy/library/win32/x64/Release/TracyProfiler.lib`

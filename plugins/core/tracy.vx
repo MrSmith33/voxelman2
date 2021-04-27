@@ -1,0 +1,21 @@
+struct TracyLoc
+{
+	u8* name;
+	u8* func;
+	u8* file;
+	u32 line;
+	u32 color;
+}
+
+struct TracyZoneCtx
+{
+	u32 id;
+	i32 active;
+}
+
+TracyZoneCtx ___tracy_emit_zone_begin(TracyLoc* srcloc, i32 active);
+TracyZoneCtx ___tracy_emit_zone_begin_callstack(TracyLoc* srcloc, i32 depth, i32 active);
+void ___tracy_emit_zone_end(TracyZoneCtx ctx);
+void ___tracy_emit_frame_mark(u8* name = null);
+void ___tracy_emit_frame_mark_start(u8* name);
+void ___tracy_emit_frame_mark_end(u8* name);
