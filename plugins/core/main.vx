@@ -6,6 +6,7 @@ import vulkan.types;
 import utils;
 import tracy;
 import kernel32;
+import host;
 
 void run()
 {
@@ -64,7 +65,6 @@ struct Client
 
 		enet_deinitialize();
 		vkDestroyInstance(instance, null);
-
 		glfwDestroyWindow(window);
 		glfwTerminate();
 	}
@@ -100,6 +100,9 @@ struct Client
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman", null, null);
+
+		glfwSetWindowUserPointer(window, &this);
+		glfwSetKeyCallback(window, &glfw_key_callback);
 	}
 
 	void initVulkan()
@@ -138,22 +141,34 @@ struct Client
 
 		createInfo.enabledLayerCount = 0;
 
+		println("vkCreateInstance ", cast(void*)vkCreateInstance, " ", cast(void*)&createInfo, " ", cast(void*)&appInfo);
 		if (vkCreateInstance(&createInfo, null, &instance) != VK_SUCCESS) {
 			println("vkCreateInstance failed");
 			isRunning = false;
 			return;
 		}
-		//println("VkInstance ", cast(void*)instance);
+		println("VkInstance ", cast(void*)instance);
 		loadInstanceLevelFunctions(instance);
 
 		u32 extensionCount;
 		vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
 		println(extensionCount, " extensions supported");
-		//VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
-		//vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
-		//for (i32 i; i < extensionCount; ++i) {
-		//	println(fromStringz(extensions[i].extensionName.ptr), " ", extensions[i].specVersion);
-		//}
-		//freeArray[VkExtensionProperties](extensions);
+		VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
+		vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
+		for (i32 i; i < extensionCount; ++i) {
+			println(extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
+		}
+		freeArray[VkExtensionProperties](extensions);
 	}
+
+	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
+	{
+		println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
+	}
+}
+
+void glfw_key_callback(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods)
+{
+	Client* client = cast(Client*)glfwGetWindowUserPointer(window);
+	client.onKey(key, scancode, action, mods);
 }

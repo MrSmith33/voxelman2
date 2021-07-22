@@ -1,5 +1,5 @@
-void ExitProcess(u32 uExitCode);
-void ExitThread(u32 uExitCode);
+noreturn ExitProcess(u32 uExitCode);
+noreturn ExitThread(u32 uExitCode);
 u64 GetTickCount64();
 void QueryPerformanceCounter(i64* performanceCount);
 void QueryPerformanceFrequency(i64* frequency);

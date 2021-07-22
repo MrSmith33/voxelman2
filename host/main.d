@@ -16,7 +16,13 @@ void main() {
 	else version(linux) driver.context.targetOs = TargetOs.linux;
 	else static assert(false, "Unhandled OS");
 
+	//driver.context.printIr = true;
+	//driver.context.printLirRA = true;
+	//driver.context.printCodeHex = true;
+	driver.context.printTraceOnError = true;
+
 	driver.beginCompilation();
+	//driver.context.setDumpFilter("createInstance");
 	// add files
 	regModules(driver);
 
@@ -28,6 +34,7 @@ void main() {
 	} catch(CompilationException e) {
 		if (e.isICE) throw e;
 		writefln("Compile error:");
+		driver.context.print_analysis_stack;
 		writeln(driver.context.errorSink.text);
 		writeln(e);
 		return;
@@ -43,6 +50,7 @@ void main() {
 	auto endCompileTime = currTime;
 	___tracy_emit_zone_end(tracy_ctx);
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
+	stdout.flush;
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");
 

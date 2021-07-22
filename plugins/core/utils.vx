@@ -2,6 +2,14 @@ import kernel32;
 import lz4;
 import host;
 
+u8[] fromStringz(u8* cString) {
+	if (cString == null) return null;
+	u8* cursor = cString;
+	while(*cursor) ++cursor;
+	u64 length = cast(u64)(cursor - cString);
+	return cString[0..length];
+}
+
 i64 curMsecs() {
 	i64 counter;
 	QueryPerformanceCounter(&counter);

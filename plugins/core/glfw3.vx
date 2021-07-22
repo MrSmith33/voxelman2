@@ -467,6 +467,8 @@ GLFWmousebuttonfun glfwSetMouseButtonCallback(GLFWwindow*,GLFWmousebuttonfun);
 GLFWcursorposfun glfwSetCursorPosCallback(GLFWwindow*,GLFWcursorposfun);
 GLFWcursorenterfun glfwSetCursorEnterCallback(GLFWwindow*,GLFWcursorenterfun);
 GLFWscrollfun glfwSetScrollCallback(GLFWwindow*,GLFWscrollfun);
+void glfwSetWindowUserPointer(GLFWwindow* window, void* pointer);
+void* glfwGetWindowUserPointer(GLFWwindow* window);
 i32 glfwJoystickPresent(i32);
 f32* glfwGetJoystickAxes(i32,i32*);
 u8* glfwGetJoystickButtons(i32,i32*);
