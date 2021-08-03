@@ -1,5 +1,7 @@
 # Voxelman v2
 
+![CI](https://github.com/MrSmith33/voxelman2/workflows/CI/badge.svg?branch=master&event=push)
+
 Voxel engine focused on:
 - Modding via embedded Vox language compiler, which offers quick recompilation
 - High performance through the use of ECS, multithreading and Vulkan API, mdbx database
