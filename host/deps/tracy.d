@@ -17,9 +17,9 @@ struct TracyCZoneCtx
 	int active;
 }
 
-TracyCZoneCtx ___tracy_emit_zone_begin(const TracyLoc* srcloc, int active);
-TracyCZoneCtx ___tracy_emit_zone_begin_callstack(const TracyLoc* srcloc, int depth, int active);
-void ___tracy_emit_zone_end(TracyCZoneCtx ctx);
-void ___tracy_emit_frame_mark(const char* name);
-void ___tracy_emit_frame_mark_start(const char* name);
-void ___tracy_emit_frame_mark_end(const char* name);
+TracyCZoneCtx function(const TracyLoc* srcloc, int active) ___tracy_emit_zone_begin;
+TracyCZoneCtx function(const TracyLoc* srcloc, int depth, int active) ___tracy_emit_zone_begin_callstack;
+void function(TracyCZoneCtx ctx) ___tracy_emit_zone_end;
+void function(const char* name) ___tracy_emit_frame_mark;
+void function(const char* name) ___tracy_emit_frame_mark_start;
+void function(const char* name) ___tracy_emit_frame_mark_end;

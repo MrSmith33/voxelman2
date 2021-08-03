@@ -1,12 +1,14 @@
 import std.string : toStringz;
 import std.stdio;
-import std.traits : isFunction;
+import std.traits : isFunction, isFunctionPointer, isType;
 import all;
 import deps.tracy;
 
 void main() {
 	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
+
+	load_dll!(deps.tracy)("TracyProfiler.dll");
 
 	auto startCompileTime = currTime;
 	Driver driver;
@@ -87,9 +89,12 @@ void registerHostSymbols(ref Driver driver)
 		foreach(m; __traits(allMembers, Module))
 		{
 			alias member = __traits(getMember, Module, m);
-			static if (isFunction!member) { // only pickup functions
+			static if (isFunction!member) { // pickup functions
 				//writefln("reg %s %s", hostModuleName, m);
 				driver.addHostSymbol(hostModuleIndex, HostSymbol(m, cast(void*)&member));
+			} else static if (isFunctionPointer!member && !isType!member) { // pickup function pointers
+				//writefln("reg %s %s", hostModuleName, m);
+				driver.addHostSymbol(hostModuleIndex, HostSymbol(m, cast(void*)member));
 			}
 		}
 	}
@@ -112,6 +117,24 @@ void registerHostSymbols(ref Driver driver)
 
 	LinkIndex hostModuleIndex = driver.getOrCreateHostModuleIndex();
 	driver.addHostSymbol(hostModuleIndex, HostSymbol("host_print", cast(void*)&host_print));
+}
+
+void load_dll(alias Module)(string dllFile) {
+	import core.sys.windows.windows : LoadLibraryA, GetProcAddress;
+	void* lib = LoadLibraryA(dllFile.toStringz);
+	enforce(lib !is null, format("Cannot load %s", dllFile));
+	//writefln("lib %X %s", lib, dllFile);
+
+	foreach(m; __traits(allMembers, Module))
+	{
+		alias member = __traits(getMember, Module, m);
+		static if (isFunctionPointer!member && !isType!member) { // only pickup function pointers
+			void* symPtr = GetProcAddress(lib, m);
+			//writefln("  sym %X %s", symPtr, m);
+			enforce(symPtr !is null, format("Cannot find `%s` in %s", m, dllFile));
+			member = cast(typeof(member))symPtr;
+		}
+	}
 }
 
 extern(C) void host_print(SliceString str) {

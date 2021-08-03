@@ -110,7 +110,6 @@ void mdbx_reader_list();
 void mdbx_replace();
 void mdbx_replace_ex();
 void mdbx_setup_debug();
-void mdbx_strdup();
 void mdbx_strerror();
 void mdbx_thread_register();
 void mdbx_thread_unregister();
