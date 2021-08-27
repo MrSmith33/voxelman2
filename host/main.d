@@ -18,6 +18,7 @@ void main() {
 	else version(linux) driver.context.targetOs = TargetOs.linux;
 	else static assert(false, "Unhandled OS");
 
+	//driver.context.validateIr = true;
 	//driver.context.printIr = true;
 	//driver.context.printLirRA = true;
 	//driver.context.printCodeHex = true;
@@ -36,11 +37,11 @@ void main() {
 	} catch(CompilationException e) {
 		if (e.isICE) throw e;
 		writefln("Compile error:");
-		driver.context.print_analysis_stack;
 		writeln(driver.context.errorSink.text);
-		writeln(e);
 		return;
 	} catch(Throwable e) {
+		driver.context.print_analysis_stack;
+		writeln(driver.context.errorSink.text);
 		auto func = driver.context.currentFunction;
 		if (func) {
 			auto mod = func._module.get!ModuleDeclNode(&driver.context);
@@ -52,6 +53,8 @@ void main() {
 	auto endCompileTime = currTime;
 	___tracy_emit_zone_end(tracy_ctx);
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
+	//writefln("RO: %s", driver.context.roStaticDataBuffer.bufPtr);
+
 	stdout.flush;
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");

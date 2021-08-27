@@ -14,7 +14,7 @@ WIP rewrite of voxelman
 ## Links
 
 * [Voxelman v1](https://github.com/MrSmith33/voxelman)
-* [Vox lang](https://github.com/MrSmith33/vox)
+* [Vox programming language](https://github.com/MrSmith33/vox)
 
 ## Getting deps
 

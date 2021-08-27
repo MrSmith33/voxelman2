@@ -24,11 +24,13 @@ struct Client
 	MDBX_env* mdbxEnv;
 
 	VkInstance instance;
+	VkDebugUtilsMessengerEXT debugMessenger;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
 
 	bool enableValidationLayers = true;
+	u8*[1] validationLayers;
 
 	bool isRunning = true;
 
@@ -43,6 +45,8 @@ struct Client
 
 	void init()
 	{
+		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
+
 		initWindow();
 		initVulkan();
 
@@ -64,6 +68,11 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+
+		if (enableValidationLayers) {
+			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
+		}
+
 		vkDestroyInstance(instance, null);
 		glfwDestroyWindow(window);
 		glfwTerminate();
@@ -116,6 +125,7 @@ struct Client
 		loadGlobalLevelFunctions( cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr"));
 
 		createInstance();
+		setupDebugMessenger();
 	}
 
 	void createInstance()
@@ -132,39 +142,141 @@ struct Client
 		createInfo.sType = cast(VkStructureType)VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
 
-		u32 glfwExtensionCount = 0;
-		u8** glfwExtensions;
-		glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+		Array[u8*] extensions = getRequiredExtensions;
 
-		createInfo.enabledExtensionCount = glfwExtensionCount;
-		createInfo.ppEnabledExtensionNames = glfwExtensions;
+		println("Requesting ", extensions.length, " extensions:");
+		for (i32 i; i < extensions.length; ++i) {
+			println("  ", extensions.bufPtr[i].fromStringz);
+		}
 
-		createInfo.enabledLayerCount = 0;
+		createInfo.enabledExtensionCount = extensions.length;
+		createInfo.ppEnabledExtensionNames = extensions.bufPtr;
+
+		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+		if (enableValidationLayers) {
+			if (!checkValidationLayerSupport()) {
+				println("Validation layers requested, but not available!");
+			} else {
+				createInfo.enabledLayerCount = cast(u32)validationLayers.length;
+				createInfo.ppEnabledLayerNames = validationLayers.ptr;
+				println("Validation ", createInfo.enabledLayerCount, " ", createInfo.ppEnabledLayerNames[0], " ", this);
+
+				populateDebugMessengerCreateInfo(&debugCreateInfo);
+				createInfo.pNext = &debugCreateInfo;
+			}
+		} else {
+			createInfo.enabledLayerCount = 0;
+		}
 
 		println("vkCreateInstance ", cast(void*)vkCreateInstance, " ", cast(void*)&createInfo, " ", cast(void*)&appInfo);
-		if (vkCreateInstance(&createInfo, null, &instance) != VK_SUCCESS) {
-			println("vkCreateInstance failed");
+		i32 vkCreateInstanceResult = cast(i32)vkCreateInstance(&createInfo, null, &instance);
+		if (vkCreateInstanceResult != VK_SUCCESS) {
+			println("vkCreateInstance failed: ", vkCreateInstanceResult);
 			isRunning = false;
 			return;
 		}
 		println("VkInstance ", cast(void*)instance);
 		loadInstanceLevelFunctions(instance);
 
-		u32 extensionCount;
-		vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
-		println(extensionCount, " extensions supported");
-		VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
-		vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
-		for (i32 i; i < extensionCount; ++i) {
-			println(extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
+		{
+			u32 extensionCount;
+			vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
+			println("\n", extensionCount, " extensions supported");
+			VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
+			vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
+			for (i32 i; i < extensionCount; ++i) {
+				println("  ", extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
+			}
+			freeArray[VkExtensionProperties](extensions);
 		}
-		freeArray[VkExtensionProperties](extensions);
+	}
+
+	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo) {
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+		createInfo.pfnUserCallback = &debugCallback; // compiler bug
+		createInfo.pUserData = null; // Optional
+	}
+
+	void setupDebugMessenger() {
+		if (!enableValidationLayers) return;
+
+		VkDebugUtilsMessengerCreateInfoEXT createInfo;
+		populateDebugMessengerCreateInfo(&createInfo);
+
+		if (vkCreateDebugUtilsMessengerEXT(instance, &createInfo, null, &debugMessenger) != VK_SUCCESS) {
+			println("failed to set up debug messenger!");
+			isRunning = false;
+		}
+	}
+
+	bool checkValidationLayerSupport() {
+		u32 layerCount;
+		vkEnumerateInstanceLayerProperties(&layerCount, null);
+		VkLayerProperties[] availableLayers = makeArray[VkLayerProperties](layerCount);
+		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.ptr);
+		println("\n", layerCount, " layers supported");
+
+		bool hasAllLayers = checkLayers(validationLayers, availableLayers);
+
+		println("has VK_LAYER_KHRONOS_validation: ", hasAllLayers);
+		freeArray[VkLayerProperties](availableLayers);
+
+		return hasAllLayers;
+	}
+
+	Array[u8*] getRequiredExtensions() {
+		Array[u8*] extensions;
+
+		u32 glfwExtensionCount = 0;
+		u8** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+		extensions.putArray(glfwExtensions[0..glfwExtensionCount]);
+
+		if (enableValidationLayers) {
+			extensions.put(VK_EXT_DEBUG_UTILS_EXTENSION_NAME.ptr);
+		}
+
+		return extensions;
 	}
 
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
 	{
 		println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
 	}
+}
+
+u32 debugCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType,
+	VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData) {
+
+	println("validation layer: ", pCallbackData.pMessage.fromStringz);
+
+	return VK_FALSE;
+}
+
+bool checkLayers(u8*[] requestedLayers, VkLayerProperties[] availableLayers)
+{
+	for (i32 i; i < requestedLayers.length; ++i) {
+		u8[] requestedLayer = requestedLayers[i].fromStringz;
+		//println("req ", requestedLayer);
+		bool layerFound = false;
+		for (i32 j; j < availableLayers.length; ++j) {
+			u8[] name = availableLayers[j].layerName.ptr.fromStringz;
+			//println("  ", name, " ", availableLayers[j].specVersion, " ", availableLayers[j].implementationVersion, " ", availableLayers[j].description.ptr.fromStringz);
+			if (equal[u8[]](name, requestedLayer)) {
+				layerFound = true;
+				break;
+			}
+		}
+		if (!layerFound) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void glfw_key_callback(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods)

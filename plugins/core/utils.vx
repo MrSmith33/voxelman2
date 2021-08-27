@@ -10,6 +10,30 @@ u8[] fromStringz(u8* cString) {
 	return cString[0..length];
 }
 
+bool equal[T](T a, T b) #inline {
+	#if($isSlice(T)) {
+		alias Base = $baseOf(T);
+		return are_arrays_equal[Base](a, b);
+	} else {
+		return a == b;
+	}
+}
+
+bool are_arrays_equal[T](T[] a, T[] b) {
+	if (a.length != b.length) return false;
+	for (u64 i; i < a.length; ++i) {
+		if (!equal[T](a[i], b[i])) return false;
+	}
+	return true;
+}
+
+bool contains[T](T[] array, T needle) {
+	for (u64 i; i < array.length; ++i) {
+		if (equal[T](array[i], needle)) return true;
+	}
+	return false;
+}
+
 i64 curMsecs() {
 	i64 counter;
 	QueryPerformanceCounter(&counter);
@@ -79,6 +103,9 @@ struct Array[T]
 	void free()
 	{
 		freeArray[T](bufPtr[0..length]);
+		length = 0;
+		capacity = 0;
+		bufPtr = null;
 	}
 
 	void clear()
@@ -100,6 +127,14 @@ struct Array[T]
 	T[] data()
 	{
 		return bufPtr[0..length];
+	}
+
+	void putArray(T[] items)
+	{
+		if (length + items.length > capacity) extend(cast(u32)items.length);
+		for (u32 i = length; i < items.length; ++i)
+			bufPtr[length+i] = items[i];
+		length += cast(u32)items.length;
 	}
 
 	void put(T item)
@@ -125,8 +160,10 @@ struct Array[T]
 		capacityNeeded = max[u32](capacityNeeded, MIN_CAPACITY);
 		HANDLE heap = GetProcessHeap();
 		u8* newBlock = cast(u8*)HeapAlloc(heap, 0, capacityNeeded);
-		memcopy(newBlock[0..length * T.sizeof], (cast(u8*)bufPtr)[0..length * T.sizeof]);
-		HeapFree(heap, 0, cast(void*)bufPtr);
+		if (bufPtr != null) {
+			memcopy(newBlock[0..length * T.sizeof], (cast(u8*)bufPtr)[0..length * T.sizeof]);
+			HeapFree(heap, 0, cast(void*)bufPtr);
+		}
 		bufPtr = cast(T*)newBlock;
 		capacity = cast(u32)(capacityNeeded / T.sizeof);
 	}
@@ -158,13 +195,22 @@ void printString(u8[] str) {
 		null);
 }
 
+void printBool(bool b) #inline {
+	if (b) printString("true");
+	else printString("false");
+}
+
 $alias selectPrintFunc($type T) {
-	if ($isInteger(T))
+	if ($isInteger(T)) {
+		if (T == u64) return printUint;
 		return printInt;
+	}
 	if ($isSlice(T))
 		return printString;
 	if ($isPointer(T))
 		return printPtr;
+	if (T == bool)
+		return printBool;
 	$compileError("selectPrintFunc: Invalid type");
 }
 
@@ -191,7 +237,7 @@ void printArray[T](T[] array)
 	{
 		if (i > 0)
 			print(", ");
-		printInt(array[i]);
+		print(array[i]);
 	}
 	print("]");
 }
@@ -209,11 +255,17 @@ void printInt(i64 i, u32 minSize = 1, u8 base = 10)
 	u8[] res = formatInt(i, &buf, 1, base);
 	print(res);
 }
+void printUint(u64 i, u32 minSize = 1, u8 base = 10)
+{
+	u8[INT_BUF_SIZE] buf;
+	u8[] res = formatUint(i, &buf, 1, base);
+	print(res);
+}
 
-void printPtr(void* ptr)
+void printPtr(void* ptr) #inline
 {
 	printString("0x");
-	printInt(cast(i64)ptr, 16, 16);
+	printUint(cast(u64)ptr, 16, 16);
 }
 
 u8[] formatInt(i64 i, u8[INT_BUF_SIZE]* output, u32 minSize, u8 base)
@@ -260,6 +312,40 @@ u8[] formatInt(i64 i, u8[INT_BUF_SIZE]* output, u32 minSize, u8 base)
 		}
 		if (overflow) {
 			++(*output)[INT_BUF_SIZE-1];
+		}
+	}
+	return (*output)[INT_BUF_SIZE - numDigits..INT_BUF_SIZE];
+}
+
+u8[] formatUint(u64 i, u8[INT_BUF_SIZE]* output, u32 minSize, u8 base)
+{
+	u32 numDigits = 0;
+	if (i == 0)
+	{
+		if (minSize == 0)
+			minSize = 1;
+		setRangeu8((*output)[INT_BUF_SIZE - minSize..INT_BUF_SIZE], ' ');
+		(*output)[INT_BUF_SIZE-1] = '0';
+		numDigits = minSize;
+	}
+	else
+	{
+		if (base <= 10) {
+			while (i) {
+				u8 c = cast(u8)('0' + i % base);
+				(*output)[INT_BUF_SIZE - ++numDigits] = c;
+				i /= base;
+			}
+		} else {
+			while (i) {
+				u8 c = hexDigitsUpper[i % base];
+				(*output)[INT_BUF_SIZE - ++numDigits] = c;
+				i /= base;
+			}
+		}
+
+		while (numDigits < minSize) {
+			(*output)[INT_BUF_SIZE - ++numDigits] = ' ';
 		}
 	}
 	return (*output)[INT_BUF_SIZE - numDigits..INT_BUF_SIZE];
