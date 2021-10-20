@@ -1,3 +1,4 @@
 /// Host function bindings
+@extern(module, "host"):
 
 void host_print(u8[] str);

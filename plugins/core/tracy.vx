@@ -1,3 +1,5 @@
+@extern(module, "tracy"):
+
 struct TracyLoc
 {
 	u8* name;

@@ -1,3 +1,5 @@
+@extern(module, "mdbx"):
+
 struct MDBX_env;
 i32 mdbx_env_create(MDBX_env **penv);
 i32 mdbx_env_open(MDBX_env *env, u8* pathname, u32 flags, u16 mode);

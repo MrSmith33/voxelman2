@@ -29,6 +29,8 @@ void main() {
 	// add files
 	regModules(driver);
 
+	auto times = PerPassTimeMeasurements(1, driver.passes);
+
 	static loc = TracyLoc("Compile", "main.d", "main.d", 42, 0xFF00FF);
 	auto tracy_ctx = ___tracy_emit_zone_begin(&loc, 1);
 	// compile
@@ -52,8 +54,13 @@ void main() {
 	driver.markCodeAsExecutable();
 	auto endCompileTime = currTime;
 	___tracy_emit_zone_end(tracy_ctx);
-	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
 	//writefln("RO: %s", driver.context.roStaticDataBuffer.bufPtr);
+
+	auto duration = endCompileTime - startCompileTime;
+	times.onIteration(0, duration);
+	//times.print;
+
+	writefln("Compiled in %ss", scaledNumberFmt(duration));
 
 	stdout.flush;
 
@@ -64,7 +71,7 @@ void main() {
 
 void regModules(ref Driver driver)
 {
-	registerHostSymbols(driver);
+	registerHostSymbols(&driver.context);
 	driver.addModule(SourceFileInfo("../plugins/core/glfw3.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/kernel32.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/lz4.vx"));
@@ -79,25 +86,23 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/vulkan/types.vx"));
 }
 
-void registerHostSymbols(ref Driver driver)
+void registerHostSymbols(CompilationContext* context)
 {
 	void regHostModule(alias Module)(string hostModuleName)
 	{
-		ObjectModule hostModule = {
-			kind : ObjectModuleKind.isHost,
-			id : driver.context.idMap.getOrRegNoDup(&driver.context, hostModuleName)
-		};
-		LinkIndex hostModuleIndex = driver.context.objSymTab.addModule(hostModule);
+		Identifier modId = context.idMap.getOrRegNoDup(context, hostModuleName);
+		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
 
 		foreach(m; __traits(allMembers, Module))
 		{
 			alias member = __traits(getMember, Module, m);
+			Identifier symId = context.idMap.getOrRegNoDup(context, m);
 			static if (isFunction!member) { // pickup functions
 				//writefln("reg %s %s", hostModuleName, m);
-				driver.addHostSymbol(hostModuleIndex, HostSymbol(m, cast(void*)&member));
+				context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&member);
 			} else static if (isFunctionPointer!member && !isType!member) { // pickup function pointers
 				//writefln("reg %s %s", hostModuleName, m);
-				driver.addHostSymbol(hostModuleIndex, HostSymbol(m, cast(void*)member));
+				context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)member);
 			}
 		}
 	}
@@ -118,8 +123,10 @@ void registerHostSymbols(ref Driver driver)
 	regHostModule!(deps.mimalloc)("mimalloc");
 	regHostModule!(deps.tracy)("tracy");
 
-	LinkIndex hostModuleIndex = driver.getOrCreateHostModuleIndex();
-	driver.addHostSymbol(hostModuleIndex, HostSymbol("host_print", cast(void*)&host_print));
+	Identifier modId = context.idMap.getOrRegNoDup(context, "host");
+	LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
+	Identifier symId = context.idMap.getOrRegNoDup(context, "host_print");
+	context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&host_print);
 }
 
 void load_dll(alias Module)(string dllFile) {

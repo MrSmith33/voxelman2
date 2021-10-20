@@ -7,8 +7,8 @@ on:
   release: # test + build + release
     types: [ published ]
 env:
-  DC1: ldc-1.25.1
-  DC2: dmd-2.096.0
+  DC1: ldc-1.28.0
+  DC2: dmd-2.098.0
   LINKFLAGS: -L/NODEFAULTLIB:libcmt -L/NODEFAULTLIB:libvcruntime
   LIBS: lib/liblz4_static.lib lib/glfw3.lib lib/enet64.lib lib/mdbx.lib lib/mimalloc-static.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib msvcrt.lib
   DEPS: -I=vox/source -I=host

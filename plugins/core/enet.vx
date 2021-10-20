@@ -1,3 +1,5 @@
+@extern(module, "enet"):
+
 struct ENetHost;
 struct ENetPacket;
 struct ENetPeer;

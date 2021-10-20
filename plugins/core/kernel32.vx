@@ -1,3 +1,5 @@
+@extern(module, "kernel32"):
+
 noreturn ExitProcess(u32 uExitCode);
 noreturn ExitThread(u32 uExitCode);
 u64 GetTickCount64();
