@@ -24,6 +24,7 @@ struct Client
 	MDBX_env* mdbxEnv;
 
 	VkInstance instance;
+	VkPhysicalDevice physicalDevice;
 	VkDebugUtilsMessengerEXT debugMessenger;
 
 	enum WIDTH = 800;
@@ -126,6 +127,7 @@ struct Client
 
 		createInstance();
 		setupDebugMessenger();
+		pickPhysicalDevice();
 	}
 
 	void createInstance()
@@ -241,10 +243,113 @@ struct Client
 		return extensions;
 	}
 
+	void pickPhysicalDevice() {
+		u32 deviceCount = 0;
+		vkEnumeratePhysicalDevices(instance, &deviceCount, null);
+
+		if (deviceCount == 0) {
+			println("failed to find GPUs with Vulkan support!");
+			isRunning = false;
+			return;
+		}
+
+		VkPhysicalDevice[] devices = makeArray[VkPhysicalDevice](deviceCount);
+		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.ptr);
+
+		println("Found ", deviceCount, " devices:");
+
+		i64 bestDeviceScore = 0;
+		for (u32 i; i < deviceCount; ++i) {
+			i64 deviceScore = rateDeviceSuitability(devices[i]);
+			if (deviceScore > bestDeviceScore) {
+				bestDeviceScore = deviceScore;
+				physicalDevice = devices[i];
+			}
+		}
+
+		freeArray[VkPhysicalDevice](devices);
+
+		if (physicalDevice == null) {
+			println("failed to find a suitable GPU!");
+			isRunning = false;
+			return;
+		}
+
+		println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
+	}
+
+	// negative score means that device is unsuitable
+	i64 rateDeviceSuitability(VkPhysicalDevice device) {
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+		println("  ", deviceProperties.deviceName.ptr.fromStringz);
+
+		VkPhysicalDeviceFeatures deviceFeatures;
+		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+		i64 score = 0;
+
+		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+			score += 1000;
+		}
+
+		QueueFamilyIndices indices = findQueueFamilies(device);
+
+		if (!indices.isComplete) return -1; // unsuitable
+
+		return score;
+	}
+
+	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) {
+		QueueFamilyIndices indices;
+
+		u32 queueFamilyCount = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
+
+		VkQueueFamilyProperties[] queueFamilies = makeArray[VkQueueFamilyProperties](queueFamilyCount);
+		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.ptr);
+
+		for (u32 i; i < queueFamilyCount; ++i) {
+			VkQueueFamilyProperties queueFamily = queueFamilies[i];
+			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				indices.presentFamilies |= QueueFamily.graphics;
+				indices.graphicsFamily = i;
+			}
+			if (indices.isComplete) break;
+		}
+
+		freeArray[VkQueueFamilyProperties](queueFamilies);
+
+		return indices;
+	}
+
+	//bool isDeviceSuitable(VkPhysicalDevice device) {
+	//	VkPhysicalDeviceProperties deviceProperties;
+	//	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+	//	VkPhysicalDeviceFeatures deviceFeatures;
+	//	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+	//	return true;
+	//}
+
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
 	{
 		println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
 	}
+}
+
+struct QueueFamilyIndices {
+	QueueFamily presentFamilies; // specifies which families have valid index
+	u32 graphicsFamily;
+
+	bool isComplete() {
+		return (presentFamilies & QueueFamily.graphics) != 0;
+	}
+}
+
+enum QueueFamily : u32 {
+	graphics = 0b0000_0001,
 }
 
 u32 debugCallback(
