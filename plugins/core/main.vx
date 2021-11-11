@@ -24,8 +24,12 @@ struct Client
 	MDBX_env* mdbxEnv;
 
 	VkInstance instance;
-	VkPhysicalDevice physicalDevice;
 	VkDebugUtilsMessengerEXT debugMessenger;
+
+	VkPhysicalDevice physicalDevice;
+	VkDevice device; // logical device
+
+	VkQueue graphicsQueue;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
@@ -69,6 +73,9 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+
+		vkDeviceWaitIdle(device);
+		vkDestroyDevice(device, null);
 
 		if (enableValidationLayers) {
 			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
@@ -128,12 +135,12 @@ struct Client
 		createInstance();
 		setupDebugMessenger();
 		pickPhysicalDevice();
+		createLogicalDevice();
 	}
 
 	void createInstance()
 	{
 		VkApplicationInfo appInfo;
-		VkStructureType sType = cast(VkStructureType)VkStructureType.VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		appInfo.pApplicationName = "Hello Triangle";
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.pEngineName = "Voxelman";
@@ -141,7 +148,6 @@ struct Client
 		appInfo.apiVersion = VK_API_VERSION_1_0;
 
 		VkInstanceCreateInfo createInfo;
-		createInfo.sType = cast(VkStructureType)VkStructureType.VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		createInfo.pApplicationInfo = &appInfo;
 
 		Array[u8*] extensions = getRequiredExtensions;
@@ -194,8 +200,8 @@ struct Client
 	}
 
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo) {
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+		//createInfo.messageSeverity |= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
 		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = &debugCallback; // compiler bug
 		createInfo.pUserData = null; // Optional
@@ -283,7 +289,7 @@ struct Client
 		VkPhysicalDeviceProperties deviceProperties;
 		vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
-		println("  ", deviceProperties.deviceName.ptr.fromStringz);
+		println("  ", device, " ", deviceProperties.deviceName.ptr.fromStringz);
 
 		VkPhysicalDeviceFeatures deviceFeatures;
 		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
@@ -314,7 +320,7 @@ struct Client
 			VkQueueFamilyProperties queueFamily = queueFamilies[i];
 			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 				indices.presentFamilies |= QueueFamily.graphics;
-				indices.graphicsFamily = i;
+				indices.graphics = i;
 			}
 			if (indices.isComplete) break;
 		}
@@ -333,6 +339,48 @@ struct Client
 	//	return true;
 	//}
 
+	void createLogicalDevice() {
+		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+		VkDeviceQueueCreateInfo queueCreateInfo;
+		queueCreateInfo.queueFamilyIndex = indices.graphics;
+		queueCreateInfo.queueCount = 1;
+
+		f32 queuePriority = 1.0;
+		queueCreateInfo.pQueuePriorities = &queuePriority;
+
+		VkDeviceCreateInfo createInfo;
+
+		createInfo.pQueueCreateInfos = &queueCreateInfo;
+		createInfo.queueCreateInfoCount = 1;
+
+		createInfo.enabledExtensionCount = 0;
+
+		if (enableValidationLayers) {
+			createInfo.enabledLayerCount = cast(u32)validationLayers.length;
+			createInfo.ppEnabledLayerNames = validationLayers.ptr;
+		} else {
+			createInfo.enabledLayerCount = 0;
+		}
+
+		VkPhysicalDeviceFeatures deviceFeatures;
+		createInfo.pEnabledFeatures = &deviceFeatures;
+
+		//VkResult vkCreateDeviceResult = vkCreateDevice(physicalDevice, &createInfo, null, &device);
+		if (vkCreateDevice(physicalDevice, &createInfo, null, &device) != VK_SUCCESS) {
+			println("failed to create logical device: ");
+			isRunning = false;
+			return;
+		}
+		println("Logical device ", device);
+
+		// Load functions of this specific device. Only support single device for now
+		// For multiple devices either use `loadDeviceLevelFunctions` or `DispatchDevice`
+		loadDeviceLevelFunctionsDirect(device);
+
+		vkGetDeviceQueue(device, indices.graphics, 0, &graphicsQueue);
+	}
+
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
 	{
 		println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
@@ -341,7 +389,7 @@ struct Client
 
 struct QueueFamilyIndices {
 	QueueFamily presentFamilies; // specifies which families have valid index
-	u32 graphicsFamily;
+	u32 graphics;
 
 	bool isComplete() {
 		return (presentFamilies & QueueFamily.graphics) != 0;
