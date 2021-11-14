@@ -25,11 +25,13 @@ struct Client
 
 	VkInstance instance;
 	VkDebugUtilsMessengerEXT debugMessenger;
+	VkSurfaceKHR surface;
 
 	VkPhysicalDevice physicalDevice;
 	VkDevice device; // logical device
 
 	VkQueue graphicsQueue;
+	VkQueue presentQueue;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
@@ -54,6 +56,7 @@ struct Client
 
 		initWindow();
 		initVulkan();
+		if (!isRunning) return;
 
 		enet_initialize();
 
@@ -81,6 +84,7 @@ struct Client
 			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
 		}
 
+		vkDestroySurfaceKHR(instance, surface, null);
 		vkDestroyInstance(instance, null);
 		glfwDestroyWindow(window);
 		glfwTerminate();
@@ -133,9 +137,15 @@ struct Client
 		loadGlobalLevelFunctions( cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr"));
 
 		createInstance();
+		if (!isRunning) return;
 		setupDebugMessenger();
+		if (!isRunning) return;
+		createSurface();
+		if (!isRunning) return;
 		pickPhysicalDevice();
+		if (!isRunning) return;
 		createLogicalDevice();
+		if (!isRunning) return;
 	}
 
 	void createInstance()
@@ -219,6 +229,13 @@ struct Client
 		}
 	}
 
+	void createSurface() {
+		if (glfwCreateWindowSurface(instance, window, null, &surface) != VK_SUCCESS) {
+			println("failed to create window surface!");
+			isRunning = false;
+		}
+	}
+
 	bool checkValidationLayerSupport() {
 		u32 layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, null);
@@ -298,6 +315,7 @@ struct Client
 
 		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 			score += 1000;
+			println("    discrete GPU");
 		}
 
 		QueueFamilyIndices indices = findQueueFamilies(device);
@@ -319,8 +337,15 @@ struct Client
 		for (u32 i; i < queueFamilyCount; ++i) {
 			VkQueueFamilyProperties queueFamily = queueFamilies[i];
 			if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-				indices.presentFamilies |= QueueFamily.graphics;
-				indices.graphics = i;
+				indices.presentFamilies |= QueueFamilyFlags.graphics;
+				indices.indices[QueueFamily.graphics] = i;
+			}
+
+			VkBool32 presentSupport = false;
+			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
+			if (presentSupport) {
+				indices.presentFamilies |= QueueFamilyFlags.present;
+				indices.indices[QueueFamily.present] = i;
 			}
 			if (indices.isComplete) break;
 		}
@@ -341,18 +366,39 @@ struct Client
 
 	void createLogicalDevice() {
 		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+		println("Queues");
+		println("  Graphics: ", indices.indices[QueueFamily.graphics]);
+		println("   Present: ", indices.indices[QueueFamily.present]);
 
-		VkDeviceQueueCreateInfo queueCreateInfo;
-		queueCreateInfo.queueFamilyIndex = indices.graphics;
-		queueCreateInfo.queueCount = 1;
+
+		// Specify queues to be created in logical device
+		Array[VkDeviceQueueCreateInfo] queueCreateInfos;
 
 		f32 queuePriority = 1.0;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
+		for (u32 i = 0; i < QueueFamilyIndices.NUM_FAMILIES; ++i) {
 
+			bool alreadyExists = false;
+			for (u32 j = 0; j < i; ++j) {
+				if (indices.indices[i] == indices.indices[j]) {
+					alreadyExists = true;
+					break;
+				}
+			}
+			if (alreadyExists) continue;
+
+			VkDeviceQueueCreateInfo queueCreateInfo;
+			queueCreateInfo.queueFamilyIndex = indices.indices[i];
+			queueCreateInfo.queueCount = 1;
+			queueCreateInfo.pQueuePriorities = &queuePriority;
+			queueCreateInfos.put(queueCreateInfo);
+		}
+
+
+		// Create logical device
 		VkDeviceCreateInfo createInfo;
 
-		createInfo.pQueueCreateInfos = &queueCreateInfo;
-		createInfo.queueCreateInfoCount = 1;
+		createInfo.pQueueCreateInfos = queueCreateInfos.bufPtr;
+		createInfo.queueCreateInfoCount = cast(u32)queueCreateInfos.length;
 
 		createInfo.enabledExtensionCount = 0;
 
@@ -366,19 +412,24 @@ struct Client
 		VkPhysicalDeviceFeatures deviceFeatures;
 		createInfo.pEnabledFeatures = &deviceFeatures;
 
-		//VkResult vkCreateDeviceResult = vkCreateDevice(physicalDevice, &createInfo, null, &device);
-		if (vkCreateDevice(physicalDevice, &createInfo, null, &device) != VK_SUCCESS) {
+		VkResult vkCreateDeviceResult = vkCreateDevice(physicalDevice, &createInfo, null, &device);
+		queueCreateInfos.free();
+		if (vkCreateDeviceResult != VK_SUCCESS) {
 			println("failed to create logical device: ");
 			isRunning = false;
 			return;
 		}
 		println("Logical device ", device);
 
+
 		// Load functions of this specific device. Only support single device for now
 		// For multiple devices either use `loadDeviceLevelFunctions` or `DispatchDevice`
 		loadDeviceLevelFunctionsDirect(device);
 
-		vkGetDeviceQueue(device, indices.graphics, 0, &graphicsQueue);
+
+		// Retreive queue handles of queues we requested
+		vkGetDeviceQueue(device, indices.indices[QueueFamily.graphics], 0, &graphicsQueue);
+		vkGetDeviceQueue(device, indices.indices[QueueFamily.present],  0, &presentQueue);
 	}
 
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
@@ -388,16 +439,25 @@ struct Client
 }
 
 struct QueueFamilyIndices {
-	QueueFamily presentFamilies; // specifies which families have valid index
-	u32 graphics;
+	enum u32 NUM_FAMILIES = 2;
 
-	bool isComplete() {
-		return (presentFamilies & QueueFamily.graphics) != 0;
+	QueueFamilyFlags presentFamilies; // specifies which families have valid index
+	u32[NUM_FAMILIES] indices;
+
+
+	bool isComplete() #inline {
+		enum requiredFamilies = QueueFamilyFlags.graphics | QueueFamilyFlags.present;
+		return (presentFamilies & requiredFamilies) == requiredFamilies;
 	}
 }
 
 enum QueueFamily : u32 {
+	graphics = 0,
+	present  = 1,
+}
+enum QueueFamilyFlags : u32 {
 	graphics = 0b0000_0001,
+	present  = 0b0000_0010,
 }
 
 u32 debugCallback(

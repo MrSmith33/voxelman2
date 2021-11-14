@@ -37,9 +37,9 @@ void main() {
 	try {
 		driver.compile();
 	} catch(CompilationException e) {
-		if (e.isICE) throw e;
 		writefln("Compile error:");
 		writeln(driver.context.errorSink.text);
+		if (e.isICE) throw e;
 		return;
 	} catch(Throwable e) {
 		driver.context.print_analysis_stack;
