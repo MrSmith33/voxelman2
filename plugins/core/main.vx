@@ -18,6 +18,17 @@ u8[] frame_name = "Frame";
 TracyLoc zone_loc1 = TracyLoc("glfwPollEvents", "update()", "main.vx", 83, 0x00AA00);
 TracyLoc zone_loc2 = TracyLoc("sleep(1)", "update()", "main.vx", 85, 0x00CC00);
 
+struct SwapChainSupportDetails {
+	VkSurfaceCapabilitiesKHR  capabilities;
+	Array[VkSurfaceFormatKHR] formats;
+	Array[VkPresentModeKHR]   presentModes;
+
+	void free() {
+		formats.free();
+		presentModes.free();
+	}
+}
+
 struct Client
 {
 	GLFWwindow* window;
@@ -33,11 +44,17 @@ struct Client
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 
+	VkSwapchainKHR swapChain;
+	VkImage[] swapChainImages;
+	VkFormat swapChainImageFormat;
+	VkExtent2D swapChainExtent;
+
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
 
 	bool enableValidationLayers = true;
 	u8*[1] validationLayers;
+	u8*[1] deviceExtensions;
 
 	bool isRunning = true;
 
@@ -53,6 +70,7 @@ struct Client
 	void init()
 	{
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
+		deviceExtensions[0] = "VK_KHR_swapchain";
 
 		initWindow();
 		initVulkan();
@@ -77,6 +95,7 @@ struct Client
 
 		enet_deinitialize();
 
+		vkDestroySwapchainKHR(device, swapChain, null);
 		vkDeviceWaitIdle(device);
 		vkDestroyDevice(device, null);
 
@@ -122,7 +141,7 @@ struct Client
 
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman", null, null);
 
-		glfwSetWindowUserPointer(window, &this);
+		glfwSetWindowUserPointer(window, this);
 		glfwSetKeyCallback(window, &glfw_key_callback);
 	}
 
@@ -146,6 +165,7 @@ struct Client
 		if (!isRunning) return;
 		createLogicalDevice();
 		if (!isRunning) return;
+		createSwapChain();
 	}
 
 	void createInstance()
@@ -164,11 +184,11 @@ struct Client
 
 		println("Requesting ", extensions.length, " extensions:");
 		for (i32 i; i < extensions.length; ++i) {
-			println("  ", extensions.bufPtr[i].fromStringz);
+			println("  ", extensions.ptr[i].fromStringz);
 		}
 
 		createInfo.enabledExtensionCount = extensions.length;
-		createInfo.ppEnabledExtensionNames = extensions.bufPtr;
+		createInfo.ppEnabledExtensionNames = extensions.ptr;
 
 		VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
 		if (enableValidationLayers) {
@@ -199,7 +219,7 @@ struct Client
 		{
 			u32 extensionCount;
 			vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
-			println("\n", extensionCount, " extensions supported");
+			println("\n", extensionCount, " instance extensions supported");
 			VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
 			vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
 			for (i32 i; i < extensionCount; ++i) {
@@ -322,6 +342,17 @@ struct Client
 
 		if (!indices.isComplete) return -1; // unsuitable
 
+		bool extensionsSupported = checkDeviceExtensionSupport(device);
+		if (!extensionsSupported) return -1;
+
+		bool swapChainAdequate = false;
+		if (extensionsSupported) {
+			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+			swapChainAdequate = swapChainSupport.formats.length > 0 && swapChainSupport.presentModes.length > 0;
+			swapChainSupport.free();
+		}
+		if (!swapChainAdequate) return -1;
+
 		return score;
 	}
 
@@ -364,6 +395,26 @@ struct Client
 	//	return true;
 	//}
 
+	bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
+		u32 extensionCount;
+		vkEnumerateDeviceExtensionProperties(device, null, &extensionCount, null);
+
+		VkExtensionProperties[] availableExtensions = makeArray[VkExtensionProperties](extensionCount);
+		vkEnumerateDeviceExtensionProperties(device, null, &extensionCount, availableExtensions.ptr);
+
+		//println("    ", extensionCount, " device extensions");
+		//for (u32 i; i < extensionCount; ++i) {
+		//	u8[] name = availableExtensions[i].extensionName.ptr.fromStringz;
+		//	println("      ", name, " ", availableExtensions[i].specVersion);
+		//}
+
+		bool hasAllExtensions = checkExtensions(deviceExtensions, availableExtensions);
+
+		freeArray[VkExtensionProperties](availableExtensions);
+
+		return hasAllExtensions;
+	}
+
 	void createLogicalDevice() {
 		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 		println("Queues");
@@ -397,10 +448,11 @@ struct Client
 		// Create logical device
 		VkDeviceCreateInfo createInfo;
 
-		createInfo.pQueueCreateInfos = queueCreateInfos.bufPtr;
+		createInfo.pQueueCreateInfos = queueCreateInfos.ptr;
 		createInfo.queueCreateInfoCount = cast(u32)queueCreateInfos.length;
 
-		createInfo.enabledExtensionCount = 0;
+		createInfo.enabledExtensionCount = cast(u32)deviceExtensions.length;
+		createInfo.ppEnabledExtensionNames = deviceExtensions.ptr;
 
 		if (enableValidationLayers) {
 			createInfo.enabledLayerCount = cast(u32)validationLayers.length;
@@ -430,6 +482,126 @@ struct Client
 		// Retreive queue handles of queues we requested
 		vkGetDeviceQueue(device, indices.indices[QueueFamily.graphics], 0, &graphicsQueue);
 		vkGetDeviceQueue(device, indices.indices[QueueFamily.present],  0, &presentQueue);
+	}
+
+	void createSwapChain() {
+		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
+
+		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+		VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+		u32 imageCount = swapChainSupport.capabilities.minImageCount + 1;
+		if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+			imageCount = swapChainSupport.capabilities.maxImageCount;
+		}
+
+		VkSwapchainCreateInfoKHR createInfo;
+		createInfo.surface = surface;
+
+		createInfo.minImageCount = imageCount;
+		createInfo.imageFormat = surfaceFormat.format;
+		createInfo.imageColorSpace = surfaceFormat.colorSpace;
+		createInfo.imageExtent = extent;
+		createInfo.imageArrayLayers = 1;
+		createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
+
+		if (indices.indices[QueueFamily.graphics] != indices.indices[QueueFamily.present]) {
+			createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+			createInfo.queueFamilyIndexCount = cast(u32)indices.indices.length;
+			createInfo.pQueueFamilyIndices = indices.indices.ptr;
+		} else {
+			createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			// createInfo.queueFamilyIndexCount = 0; // noop
+			// createInfo.pQueueFamilyIndices = null; // noop
+		}
+
+		createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+		createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		createInfo.presentMode = presentMode;
+		createInfo.clipped = VK_TRUE;
+
+		createInfo.oldSwapchain = VK_NULL_HANDLE;
+
+		if (vkCreateSwapchainKHR(device, &createInfo, null, &swapChain) != VK_SUCCESS) {
+			println("failed to create swap chain!");
+			isRunning = false;
+			return;
+		}
+
+		u32 swapChainImageCount;
+		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, null);
+		VkImage[] availableExtensions = makeArray[VkImage](swapChainImageCount);
+		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, availableExtensions.ptr);
+
+		swapChainImageFormat = surfaceFormat.format;
+		swapChainExtent = extent;
+
+		swapChainSupport.free();
+	}
+
+	VkSurfaceFormatKHR chooseSwapSurfaceFormat(Array[VkSurfaceFormatKHR] availableFormats) {
+		for (u32 i = 0; i < availableFormats.length; ++i) {
+			VkSurfaceFormatKHR availableFormat = availableFormats.ptr[i];
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				return availableFormat;
+			}
+		}
+
+		return availableFormats.ptr[0];
+	}
+
+	VkPresentModeKHR chooseSwapPresentMode(Array[VkPresentModeKHR] availablePresentModes) {
+		for (u32 i = 0; i < availablePresentModes.length; ++i) {
+			VkPresentModeKHR availablePresentMode = availablePresentModes.ptr[i];
+			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+				return availablePresentMode;
+			}
+		}
+		return VK_PRESENT_MODE_FIFO_KHR;
+	}
+
+	VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities) {
+		if (capabilities.currentExtent.width != u32.max) {
+			return capabilities.currentExtent;
+		} else {
+			i32 width;
+			i32 height;
+			glfwGetFramebufferSize(window, &width, &height);
+
+			VkExtent2D actualExtent = VkExtent2D(cast(u32)width, cast(u32)height);
+
+			actualExtent.width = clamp[u32](actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+			actualExtent.height = clamp[u32](actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+			return actualExtent;
+		}
+	}
+
+	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
+		SwapChainSupportDetails details;
+
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+		u32 formatCount;
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, null);
+
+		if (formatCount) {
+			VkSurfaceFormatKHR* ptr = details.formats.putVoid(formatCount);
+			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, ptr);
+		}
+
+		u32 presentModeCount;
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, null);
+
+		if (presentModeCount != 0) {
+			VkPresentModeKHR* ptr = details.presentModes.putVoid(presentModeCount);
+			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, ptr);
+		}
+
+		return details;
 	}
 
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
@@ -486,6 +658,25 @@ bool checkLayers(u8*[] requestedLayers, VkLayerProperties[] availableLayers)
 			}
 		}
 		if (!layerFound) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool checkExtensions(u8*[] requestedExtensions, VkExtensionProperties[] availableExtensions)
+{
+	for (i32 i; i < requestedExtensions.length; ++i) {
+		u8[] requestedExtension = requestedExtensions[i].fromStringz;
+		bool extensionFound = false;
+		for (i32 j; j < availableExtensions.length; ++j) {
+			u8[] name = availableExtensions[j].extensionName.ptr.fromStringz;
+			if (equal[u8[]](name, requestedExtension)) {
+				extensionFound = true;
+				break;
+			}
+		}
+		if (!extensionFound) {
 			return false;
 		}
 	}

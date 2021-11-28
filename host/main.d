@@ -72,13 +72,14 @@ void main() {
 void regModules(ref Driver driver)
 {
 	registerHostSymbols(&driver.context);
+	driver.addModule(SourceFileInfo("../plugins/core/enet.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/glfw3.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/host.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/kernel32.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/lz4.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/enet.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/mdbx.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/host.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/main.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/mdbx.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/mimalloc.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/tracy.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/vulkan/dispatch_device.vx"));

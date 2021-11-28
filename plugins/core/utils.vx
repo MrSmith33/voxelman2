@@ -1,4 +1,5 @@
 import kernel32;
+import mimalloc;
 import lz4;
 import host;
 
@@ -52,6 +53,12 @@ T max[T](T a, T b) #inline {
 	return b;
 }
 
+T clamp[T](T num, T min, T max) #inline {
+	if (num < min) return min;
+	if (num > max) return max;
+	return num;
+}
+
 i32 abs(i32 a) #inline {
 	if (a < 0) return -a;
 	return a;
@@ -59,17 +66,14 @@ i32 abs(i32 a) #inline {
 
 T[] makeArray[T](u64 length)
 {
-	import kernel32;
 	if (length == 0) return null;
-	T* ptr = cast(T*)HeapAlloc(GetProcessHeap(), 0, length * T.sizeof);
+	T* ptr = cast(T*)mi_calloc(length, T.sizeof);
 	return ptr[0..length];
 }
 
 void freeArray[T](T[] array)
 {
-	import kernel32;
-	if (array.ptr == null) return;
-	HeapFree(GetProcessHeap(), 0, cast(void*)array.ptr);
+	mi_free(array.ptr);
 }
 
 #if(0)
@@ -96,16 +100,16 @@ else
 
 struct Array[T]
 {
-	T* bufPtr;
+	T* ptr;
 	u32 length;
 	u32 capacity;
 
 	void free()
 	{
-		freeArray[T](bufPtr[0..length]);
+		mi_free(ptr);
 		length = 0;
 		capacity = 0;
-		bufPtr = null;
+		ptr = null;
 	}
 
 	void clear()
@@ -116,38 +120,38 @@ struct Array[T]
 	bool empty() { return length == 0; }
 
 	T* get(u64 index) {
-		return &bufPtr[index];
+		return &ptr[index];
 	}
 
 	T pop() {
 		--length;
-		return bufPtr[length];
+		return ptr[length];
 	}
 
 	T[] data()
 	{
-		return bufPtr[0..length];
+		return ptr[0..length];
 	}
 
 	void putArray(T[] items)
 	{
 		if (length + items.length > capacity) extend(cast(u32)items.length);
 		for (u32 i = length; i < items.length; ++i)
-			bufPtr[length+i] = items[i];
+			ptr[length+i] = items[i];
 		length += cast(u32)items.length;
 	}
 
 	void put(T item)
 	{
 		if (length == capacity) extend(1);
-		bufPtr[length] = item;
+		ptr[length] = item;
 		++length;
 	}
 
 	T* putVoid(u32 numItems)
 	{
 		if (length == capacity) extend(numItems);
-		T* result = &bufPtr[length];
+		T* result = &ptr[length];
 		length += numItems;
 		return result;
 	}
@@ -158,13 +162,7 @@ struct Array[T]
 		u64 bytesNeeded = (length + items) * T.sizeof;
 		u32 capacityNeeded = cast(u32)nextPOT[u32](cast(u32)bytesNeeded);
 		capacityNeeded = max[u32](capacityNeeded, MIN_CAPACITY);
-		HANDLE heap = GetProcessHeap();
-		u8* newBlock = cast(u8*)HeapAlloc(heap, 0, capacityNeeded);
-		if (bufPtr != null) {
-			memcopy(newBlock[0..length * T.sizeof], (cast(u8*)bufPtr)[0..length * T.sizeof]);
-			HeapFree(heap, 0, cast(void*)bufPtr);
-		}
-		bufPtr = cast(T*)newBlock;
+		ptr = cast(T*)mi_realloc(ptr, capacityNeeded);
 		capacity = cast(u32)(capacityNeeded / T.sizeof);
 	}
 }

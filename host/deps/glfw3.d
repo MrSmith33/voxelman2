@@ -10,6 +10,10 @@ extern(C) @nogc nothrow {
 struct GLFWmonitor;
 struct GLFWwindow;
 struct GLFWcursor;
+struct GLFWvidmode;
+struct GLFWgammaramp;
+struct GLFWimage;
+struct GLFWgamepadstate;
 
 extern(C) nothrow {
 	alias GLFWerrorfun = void function(int,const(char)*);
@@ -32,33 +36,6 @@ extern(C) nothrow {
 	alias GLFWdropfun = void function(GLFWwindow*,int,const(char*)*);
 	alias GLFWmonitorfun = void function(GLFWmonitor*,int);
 	alias GLFWjoystickfun = void function(int,int);
-}
-
-struct GLFWvidmode {
-	int width;
-	int height;
-	int redBits;
-	int greenBits;
-	int blueBits;
-	int refreshRate;
-}
-
-struct GLFWgammaramp {
-	ushort* red;
-	ushort* green;
-	ushort* blue;
-	uint size;
-}
-
-struct GLFWimage {
-	int width;
-	int height;
-	ubyte* pixels;
-}
-
-struct GLFWgamepadstate {
-	ubyte[15] buttons;
-	float[6] axes;
 }
 
 extern(C) @nogc nothrow:

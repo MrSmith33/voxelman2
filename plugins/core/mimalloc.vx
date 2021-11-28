@@ -1,3 +1,7 @@
+@extern(module, "mimalloc"):
+
+// Docs: https://microsoft.github.io/mimalloc
+
 void* mi_malloc(u64 size);
 void* mi_calloc(u64 count, u64 size);
 void* mi_realloc(void* p, u64 newsize);
