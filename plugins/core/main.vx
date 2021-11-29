@@ -48,6 +48,7 @@ struct Client
 	VkImage[] swapChainImages;
 	VkFormat swapChainImageFormat;
 	VkExtent2D swapChainExtent;
+	VkImageView[] swapChainImageViews;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
@@ -94,6 +95,11 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+
+		for (u64 i = 0; i < swapChainImageViews.length; ++i) {
+			vkDestroyImageView(device, swapChainImageViews[i], null);
+		}
+		swapChainImageViews = freeArray[VkImageView](swapChainImageViews);
 
 		vkDestroySwapchainKHR(device, swapChain, null);
 		vkDeviceWaitIdle(device);
@@ -166,6 +172,8 @@ struct Client
 		createLogicalDevice();
 		if (!isRunning) return;
 		createSwapChain();
+		if (!isRunning) return;
+		createImageViews();
 	}
 
 	void createInstance()
@@ -533,13 +541,39 @@ struct Client
 
 		u32 swapChainImageCount;
 		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, null);
-		VkImage[] availableExtensions = makeArray[VkImage](swapChainImageCount);
-		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, availableExtensions.ptr);
+		swapChainImages = resizeArray[VkImage](swapChainImages, swapChainImageCount);
+		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, swapChainImages.ptr);
 
 		swapChainImageFormat = surfaceFormat.format;
 		swapChainExtent = extent;
 
 		swapChainSupport.free();
+	}
+
+	void createImageViews() {
+		swapChainImageViews = resizeArray[VkImageView](swapChainImageViews, swapChainImages.length);
+
+		for (u64 i = 0; i < swapChainImages.length; ++i) {
+			VkImageViewCreateInfo createInfo;
+			createInfo.image = swapChainImages[i];
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			createInfo.format = swapChainImageFormat;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+
+			if (vkCreateImageView(device, &createInfo, null, &swapChainImageViews[i]) != VK_SUCCESS) {
+				println("failed to create image views!");
+				isRunning = false;
+				return;
+			}
+		}
 	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(Array[VkSurfaceFormatKHR] availableFormats) {

@@ -71,9 +71,20 @@ T[] makeArray[T](u64 length)
 	return ptr[0..length];
 }
 
-void freeArray[T](T[] array)
+T[] resizeArray[T](T[] array, u64 newLength)
+{
+	if (newLength == 0) {
+		mi_free(array.ptr);
+		return null;
+	}
+	T* ptr = cast(T*)mi_recalloc(array.ptr, newLength, T.sizeof);
+	return ptr[0..newLength];
+}
+
+T[] freeArray[T](T[] array)
 {
 	mi_free(array.ptr);
+	return null;
 }
 
 #if(0)
