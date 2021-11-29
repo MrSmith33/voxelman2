@@ -1,9 +1,10 @@
 /// Port of https://github.com/BindBC/bindbc-glfw to Vox
 /// bindbc-glfw copyright Michael D. Parker 2018.
+module core.glfw3;
 
 @extern(module, "glfw3"):
 
-import vulkan.types;
+import core.vulkan.types;
 
 enum {
 	GLFW_RELEASE = 0,

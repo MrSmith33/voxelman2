@@ -1,3 +1,4 @@
+module core.mdbx;
 @extern(module, "mdbx"):
 
 struct MDBX_env;

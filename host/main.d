@@ -72,20 +72,21 @@ void main() {
 void regModules(ref Driver driver)
 {
 	registerHostSymbols(&driver.context);
-	driver.addModule(SourceFileInfo("../plugins/core/enet.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/glfw3.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/host.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/kernel32.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/lz4.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/main.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/mdbx.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/mimalloc.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/shaderc.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/tracy.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/vulkan/dispatch_device.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/vulkan/functions.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/vulkan/types.vx"));
+	driver.addModule(SourceFileInfo("../plugins/hello_triangle/src/hello_triangle/main.vx"));
+
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/enet.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/glfw3.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/host.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/kernel32.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/lz4.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/mdbx.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/mimalloc.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/shaderc.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/tracy.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/utils.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/dispatch_device.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/functions.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/types.vx"));
 }
 
 void registerHostSymbols(CompilationContext* context)

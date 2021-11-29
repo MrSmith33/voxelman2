@@ -1,7 +1,9 @@
-import kernel32;
-import mimalloc;
-import lz4;
-import host;
+module core.utils;
+
+import core.kernel32;
+import core.mimalloc;
+import core.lz4;
+import core.host;
 
 u8[] fromStringz(u8* cString) {
 	if (cString == null) return null;

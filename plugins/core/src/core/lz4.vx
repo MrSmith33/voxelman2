@@ -1,3 +1,4 @@
+module core.lz4;
 @extern(module, "lz4"):
 
 i32 LZ4_compress_default(u8* source, u8* dest, i32 sourceSize, i32 maxDestSize);

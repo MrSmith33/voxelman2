@@ -3,7 +3,7 @@
 /// Copyright: Copyright 2015-2016 The Khronos Group Inc.; Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
 /// License:   $(https://opensource.org/licenses/MIT, MIT License).
 /// Authors: Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
-module vulkan.types;
+module core.vulkan.types;
 
 // defined in vk_platform.h
 alias uint8_t   = u8;

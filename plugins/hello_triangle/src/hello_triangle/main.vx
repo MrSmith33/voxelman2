@@ -1,13 +1,15 @@
-import enet;
-import glfw3;
-import host;
-import kernel32;
-import mdbx;
-import shaderc;
-import tracy;
-import utils;
-import vulkan.functions;
-import vulkan.types;
+module hello_triangle.main;
+
+import core.enet;
+import core.glfw3;
+import core.host;
+import core.kernel32;
+import core.mdbx;
+import core.shaderc;
+import core.tracy;
+import core.utils;
+import core.vulkan.functions;
+import core.vulkan.types;
 
 void run()
 {

@@ -1,3 +1,4 @@
+module core.kernel32;
 @extern(module, "kernel32"):
 
 u32 GetLastError();

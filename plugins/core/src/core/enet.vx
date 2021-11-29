@@ -1,3 +1,4 @@
+module core.enet;
 @extern(module, "enet"):
 
 struct ENetHost;

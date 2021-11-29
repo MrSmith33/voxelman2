@@ -3,10 +3,10 @@
 /// Copyright: Copyright 2015-2016 The Khronos Group Inc.; Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
 /// License:   $(https://opensource.org/licenses/MIT, MIT License).
 /// Authors: Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
-module vulkan.dispatch_device;
+module core.vulkan.dispatch_device;
 
-import vulkan.types;
-import vulkan.functions;
+import core.vulkan.types;
+import core.vulkan.functions;
 
 
 /// struct to group per device device level functions into a custom namespace

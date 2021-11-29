@@ -3,9 +3,9 @@
 /// Copyright: Copyright 2015-2016 The Khronos Group Inc.; Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
 /// License:   $(https://opensource.org/licenses/MIT, MIT License).
 /// Authors: Copyright 2016 Alex Parrill, Peter Particle, Andrey Penechko
-module vulkan.functions;
+module core.vulkan.functions;
 
-import vulkan.types;
+import core.vulkan.types;
 
 
 /// function type aliases

@@ -21,6 +21,7 @@
 // https://github.com/google/shaderc/blob/main/libshaderc/include/shaderc/shaderc.h
 // https://github.com/google/shaderc/blob/main/libshaderc/include/shaderc/status.h
 
+module core.shaderc;
 @extern(module, "shaderc"):
 
 alias char = u8;

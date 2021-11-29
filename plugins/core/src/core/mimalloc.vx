@@ -1,3 +1,4 @@
+module core.mimalloc;
 @extern(module, "mimalloc"):
 
 // Docs: https://microsoft.github.io/mimalloc
