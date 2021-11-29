@@ -64,6 +64,79 @@ i32 abs(i32 a) #inline {
 	return a;
 }
 
+// TODO: almost no error handling being done here
+u8[] readFile(u8[] filename) {
+	void* hFile = CreateFileA(
+		filename.ptr,    // file to open
+		GENERIC_READ,    // open for reading
+		FILE_SHARE_READ, // share for reading
+		null,            // default security
+		OPEN_EXISTING,   // existing file only
+		FILE_ATTRIBUTE_NORMAL, // normal file
+		null);           // no attr. template
+
+	if (hFile == INVALID_HANDLE_VALUE) {
+		u8* message = getLastErrorMsg();
+		print("[ERROR] Failed to read `", filename, "` ", message.fromStringz);
+		freeLastErrorMsg(message);
+		return null;
+	}
+
+	i64 size;
+	if (!GetFileSizeEx(hFile, &size))
+	{
+		CloseHandle(hFile);
+		return null; // error condition, could call GetLastError to find out more
+	}
+
+
+	if (size == 0) {
+		CloseHandle(hFile);
+		return null; // empty file
+	}
+
+	u8[] buffer = makeVoidArray[u8](cast(u64)size);
+	u32 bytesRead;
+	if (!ReadFile(hFile, buffer.ptr, cast(u32)size, &bytesRead, null))
+	{
+		u8* message = getLastErrorMsg();
+		print("Failed to read ", filename, " ", message.fromStringz);
+		freeLastErrorMsg(message);
+
+		freeArray[u8](buffer);
+		CloseHandle(hFile);
+		return null; // error condition, could call GetLastError to find out more
+	}
+	CloseHandle(hFile);
+	return buffer;
+}
+
+u8* getLastErrorMsg() {
+	u32 code = GetLastError();
+	u8* message;
+	FormatMessageA(
+		FORMAT_MESSAGE_FROM_SYSTEM |
+		FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		FORMAT_MESSAGE_IGNORE_INSERTS,
+		null,
+		code
+		0,
+		&message,
+		0,
+		null);
+	return message;
+}
+void freeLastErrorMsg(u8* msg) {
+	LocalFree(msg);
+}
+
+T[] makeVoidArray[T](u64 length)
+{
+	if (length == 0) return null;
+	T* ptr = cast(T*)mi_malloc(length * T.sizeof);
+	return ptr[0..length];
+}
+
 T[] makeArray[T](u64 length)
 {
 	if (length == 0) return null;

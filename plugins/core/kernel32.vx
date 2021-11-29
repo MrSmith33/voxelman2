@@ -1,5 +1,7 @@
 @extern(module, "kernel32"):
 
+u32 GetLastError();
+
 noreturn ExitProcess(u32 uExitCode);
 noreturn ExitThread(u32 uExitCode);
 u64 GetTickCount64();
@@ -17,6 +19,28 @@ u8 WriteConsoleA(
 	void* lpReserved
 );
 
+bool GetFileSizeEx(void* hFile, i64* lpFileSize);
+
+void* CreateFileA(
+	u8* lpFileName,
+	u32 dwDesiredAccess,
+	u32 dwShareMode,
+	void* lpSecurityAttributes,
+	u32 dwCreationDisposition,
+	u32 dwFlagsAndAttributes,
+	void* hTemplateFile
+);
+
+bool CloseHandle(void*);
+
+bool ReadFile(
+	void* hFile,
+	u8* lpBuffer,
+	u32 nNumberOfBytesToRead,
+	u32* lpNumberOfBytesRead,
+	void* lpOverlapped
+);
+
 bool WriteFile(
 	void* hFile,
 	u8* lpBuffer,
@@ -27,11 +51,29 @@ bool WriteFile(
 
 void* GetStdHandle(u32 nStdHandle);
 
-enum : u32 {
-	STD_INPUT_HANDLE  = 0xFFFFFFF6,
-	STD_OUTPUT_HANDLE = 0xFFFFFFF5,
-	STD_ERROR_HANDLE  = 0xFFFFFFF4
-}
+
+enum u32 STD_INPUT_HANDLE  = 0xFFFFFFF6;
+enum u32 STD_OUTPUT_HANDLE = 0xFFFFFFF5;
+enum u32 STD_ERROR_HANDLE  = 0xFFFFFFF4;
+
+enum u32 FILE_SHARE_READ   = 0x00000001;
+enum u32 FILE_SHARE_WRITE  = 0x00000002;
+enum u32 FILE_SHARE_DELETE = 0x00000004;
+enum u32 GENERIC_READ      = 0x80000000;
+
+enum u32 CREATE_NEW        = 1;
+enum u32 CREATE_ALWAYS     = 2;
+enum u32 OPEN_EXISTING     = 3;
+enum u32 OPEN_ALWAYS       = 4;
+enum u32 TRUNCATE_EXISTING = 5;
+
+enum u32 FILE_FLAG_OVERLAPPED     = 0x40000000;
+enum u32 FILE_ATTRIBUTE_NORMAL    = 0x00000080;
+enum u32 INVALID_FILE_ATTRIBUTES  = 0xFFFFFFFF;
+enum u32 INVALID_FILE_SIZE        = 0xFFFFFFFF;
+enum u32 INVALID_SET_FILE_POINTER = 0xFFFFFFFF;
+
+enum void* INVALID_HANDLE_VALUE = 0XFFFFFFFFFFFFFFFF;
 
 alias HANDLE = void*;
 HANDLE GetProcessHeap();
@@ -44,3 +86,23 @@ enum : u32 {
 	HEAP_NO_SERIALIZE = 0x00000001,
 	HEAP_ZERO_MEMORY = 0x00000008,
 }
+
+void* LocalFree(void* hMem);
+
+u32 FormatMessageA(
+	u32 dwFlags,
+	u8* lpSource,
+	u32 dwMessageId,
+	u32 dwLanguageId,
+	u8** lpBuffer,
+	u32 nSize,
+	void* Arguments,
+);
+
+enum u32 FORMAT_MESSAGE_ALLOCATE_BUFFER = 0x00000100;
+enum u32 FORMAT_MESSAGE_IGNORE_INSERTS  = 0x00000200;
+enum u32 FORMAT_MESSAGE_FROM_STRING     = 0x00000400;
+enum u32 FORMAT_MESSAGE_FROM_HMODULE    = 0x00000800;
+enum u32 FORMAT_MESSAGE_FROM_SYSTEM     = 0x00001000;
+enum u32 FORMAT_MESSAGE_ARGUMENT_ARRAY  = 0x00002000;
+enum u32 FORMAT_MESSAGE_MAX_WIDTH_MASK  = 0x000000FF;

@@ -1,12 +1,13 @@
-import glfw3;
 import enet;
+import glfw3;
+import host;
+import kernel32;
 import mdbx;
+import shaderc;
+import tracy;
+import utils;
 import vulkan.functions;
 import vulkan.types;
-import utils;
-import tracy;
-import kernel32;
-import host;
 
 void run()
 {
@@ -174,6 +175,8 @@ struct Client
 		createSwapChain();
 		if (!isRunning) return;
 		createImageViews();
+		if (!isRunning) return;
+		createGraphicsPipeline();
 	}
 
 	void createInstance()
@@ -574,6 +577,83 @@ struct Client
 				return;
 			}
 		}
+	}
+
+	void createGraphicsPipeline() {
+		u8[] vertShaderSource = readFile("../plugins/hello_triangle/res/shader.vert");
+		u8[] fragShaderSource = readFile("../plugins/hello_triangle/res/shader.frag");
+		if (!isRunning) return;
+
+		shaderc_compiler_t compiler = shaderc_compiler_initialize();
+		u8[] vertShaderCode = compileShader(compiler, vertShaderSource, "shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
+		u8[] fragShaderCode = compileShader(compiler, fragShaderSource, "shader.frag", "main", shaderc_shader_kind.shaderc_glsl_fragment_shader);
+		if (vertShaderCode.length == 0 || fragShaderCode.length == 0) {
+			isRunning = false; // error compiling
+		}
+		shaderc_compiler_release(compiler);
+
+		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+		freeArray[u8](vertShaderCode);
+		freeArray[u8](fragShaderCode);
+
+		VkPipelineShaderStageCreateInfo vertShaderStageInfo;
+		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertShaderStageInfo.Module = vertShaderModule;
+		vertShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo fragShaderStageInfo;
+		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.Module = fragShaderModule;
+		fragShaderStageInfo.pName = "main";
+
+		VkPipelineShaderStageCreateInfo[2] shaderStages;
+		shaderStages[0] = vertShaderStageInfo;
+		shaderStages[1] = fragShaderStageInfo;
+
+		vkDestroyShaderModule(device, vertShaderModule, null);
+		vkDestroyShaderModule(device, fragShaderModule, null);
+	}
+
+	u8[] compileShader(shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {
+		shaderc_compilation_result_t result = shaderc_compile_into_spv(
+			compiler, source.ptr, source.length,
+			shader_kind, filename.ptr, entryname, null);
+
+		u64 numWarnings = shaderc_result_get_num_warnings(result);
+		u64 numErrors = shaderc_result_get_num_errors(result);
+
+		shaderc_compilation_status status = shaderc_result_get_compilation_status(result);
+
+		println("Compiled `", filename, "` with ", numWarnings, " warnings, ", numErrors, " errors, status: ", cast(u32)status);
+
+		if (numWarnings != 0 || numErrors != 0) {
+			u8* msg = shaderc_result_get_error_message(result);
+			print(msg.fromStringz);
+		}
+
+		u64 resLength = shaderc_result_get_length(result);
+		u8* ptr = shaderc_result_get_bytes(result);
+		u8[] code = makeVoidArray[u8](resLength);
+		memcopy(code, ptr[0..resLength]);
+
+		shaderc_result_release(result);
+
+		return code;
+	}
+
+	VkShaderModule createShaderModule(u8[] code) {
+		VkShaderModuleCreateInfo createInfo;
+		createInfo.codeSize = code.length; // size is in bytes
+		createInfo.pCode = cast(u32*)code.ptr;
+
+		VkShaderModule shaderModule;
+		if (vkCreateShaderModule(device, &createInfo, null, &shaderModule) != VK_SUCCESS) {
+			println("failed to create shader module!");
+			isRunning = false;
+		}
+		return shaderModule;
 	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(Array[VkSurfaceFormatKHR] availableFormats) {

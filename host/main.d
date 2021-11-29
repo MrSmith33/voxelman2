@@ -80,6 +80,7 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/main.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/mdbx.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/mimalloc.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/shaderc.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/tracy.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/utils.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/vulkan/dispatch_device.vx"));
@@ -114,6 +115,7 @@ void registerHostSymbols(CompilationContext* context)
 	import deps.lz4;
 	import deps.mdbx;
 	import deps.mimalloc;
+	import deps.shaderc;
 	import deps.tracy;
 
 	regHostModule!(deps.enet)("enet");
@@ -122,6 +124,7 @@ void registerHostSymbols(CompilationContext* context)
 	regHostModule!(deps.lz4)("lz4");
 	regHostModule!(deps.mdbx)("mdbx");
 	regHostModule!(deps.mimalloc)("mimalloc");
+	regHostModule!(deps.shaderc)("shaderc");
 	regHostModule!(deps.tracy)("tracy");
 
 	Identifier modId = context.idMap.getOrRegNoDup(context, "host");

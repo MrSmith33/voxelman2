@@ -11,6 +11,8 @@ Voxel engine focused on:
 
 WIP rewrite of voxelman
 
+Currently following [Vulkan tutorial](https://vulkan-tutorial.com)
+
 ## Links
 
 * [Voxelman v1](https://github.com/MrSmith33/voxelman)
@@ -18,10 +20,12 @@ WIP rewrite of voxelman
 
 ## Getting deps
 
-`.lib` files must be placed into `repo_root/lib/` directory\
-`.dll` files must be placed into `bin/` directory
+`.dll` files must be placed into `bin/` directory\
+`.lib` files must be placed into `lib/` directory
 
-Download prebuilt libs from: https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+Download pre-built dependencies from:
+* https://github.com/MrSmith33/voxelman2/releases/download/deps/bin.7z
+* https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
 
 Or build/download them yourself:
 
@@ -56,3 +60,6 @@ Or build/download them yourself:
    * `Debug Information format`: `/Zi` -> `None`
    * Copy `tracy/library/win32/x64/Release/TracyProfiler.dll`
    * Linking with `TracyProfiler.lib` caused D host to not generate proper stack traces, which is important when debugging compiler and other stuff. Loading master version of tracy dll with LoadLibraryA is super slow (like 30-40s).
+* shaderc:
+   * `shaderc_shared.dll` & `shaderc_shared.lib` from [VulkanSDK](https://www.lunarg.com/vulkan-sdk/) or from releases of https://github.com/google/shaderc
+   * [https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe](https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe)`/Lib/shaderc_shared.lib` & `/Bin/shaderc_shared.dll`

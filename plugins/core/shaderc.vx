@@ -1,0 +1,633 @@
+// Copyright 2018 The Shaderc Authors. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Translated to Vox from https://github.com/google/shaderc
+// Copyright: Copyright (c) 2021 Andrey Penechko.
+// License: $(WEB boost.org/LICENSE_1_0.txt, Boost License 1.0).
+// Authors: Andrey Penechko.
+
+// https://github.com/google/shaderc/blob/main/libshaderc/include/shaderc/env.h
+// https://github.com/google/shaderc/blob/main/libshaderc/include/shaderc/shaderc.h
+// https://github.com/google/shaderc/blob/main/libshaderc/include/shaderc/status.h
+
+@extern(module, "shaderc"):
+
+alias char = u8;
+
+// Source language kind.
+enum shaderc_source_language {
+	shaderc_source_language_glsl = 0,
+	shaderc_source_language_hlsl = 1,
+}
+
+enum shaderc_shader_kind {
+	// Forced shader kinds. These shader kinds force the compiler to compile the
+	// source code as the specified kind of shader.
+	shaderc_vertex_shader = 0,
+	shaderc_fragment_shader = 1,
+	shaderc_compute_shader = 2,
+	shaderc_geometry_shader = 3,
+	shaderc_tess_control_shader = 4,
+	shaderc_tess_evaluation_shader = 5,
+
+	shaderc_glsl_vertex_shader = shaderc_vertex_shader,
+	shaderc_glsl_fragment_shader = shaderc_fragment_shader,
+	shaderc_glsl_compute_shader = shaderc_compute_shader,
+	shaderc_glsl_geometry_shader = shaderc_geometry_shader,
+	shaderc_glsl_tess_control_shader = shaderc_tess_control_shader,
+	shaderc_glsl_tess_evaluation_shader = shaderc_tess_evaluation_shader,
+
+	// Deduce the shader kind from #pragma annotation in the source code. Compiler
+	// will emit error if #pragma annotation is not found.
+	shaderc_glsl_infer_from_source = 6,
+	// Default shader kinds. Compiler will fall back to compile the source code as
+	// the specified kind of shader when #pragma annotation is not found in the
+	// source code.
+	shaderc_glsl_default_vertex_shader = 7,
+	shaderc_glsl_default_fragment_shader = 8,
+	shaderc_glsl_default_compute_shader = 9,
+	shaderc_glsl_default_geometry_shader = 10,
+	shaderc_glsl_default_tess_control_shader = 11,
+	shaderc_glsl_default_tess_evaluation_shader = 12,
+	shaderc_spirv_assembly = 13,
+	shaderc_raygen_shader = 14,
+	shaderc_anyhit_shader = 15,
+	shaderc_closesthit_shader = 16,
+	shaderc_miss_shader = 17,
+	shaderc_intersection_shader = 18,
+	shaderc_callable_shader = 19,
+	shaderc_glsl_raygen_shader = shaderc_raygen_shader,
+	shaderc_glsl_anyhit_shader = shaderc_anyhit_shader,
+	shaderc_glsl_closesthit_shader = shaderc_closesthit_shader,
+	shaderc_glsl_miss_shader = shaderc_miss_shader,
+	shaderc_glsl_intersection_shader = shaderc_intersection_shader,
+	shaderc_glsl_callable_shader = shaderc_callable_shader,
+	shaderc_glsl_default_raygen_shader = 20,
+	shaderc_glsl_default_anyhit_shader = 21,
+	shaderc_glsl_default_closesthit_shader = 22,
+	shaderc_glsl_default_miss_shader = 23,
+	shaderc_glsl_default_intersection_shader = 24,
+	shaderc_glsl_default_callable_shader = 25,
+	shaderc_task_shader = 26,
+	shaderc_mesh_shader = 27,
+	shaderc_glsl_task_shader = shaderc_task_shader,
+	shaderc_glsl_mesh_shader = shaderc_mesh_shader,
+	shaderc_glsl_default_task_shader = 28,
+	shaderc_glsl_default_mesh_shader = 29,
+}
+
+enum shaderc_profile {
+	shaderc_profile_none = 0,           // Used if and only if GLSL version did not specify
+	                                    // profiles.
+	shaderc_profile_core = 1,
+	shaderc_profile_compatibility = 2,  // Disabled. This generates an error
+	shaderc_profile_es = 3,
+}
+
+// Optimization level.
+enum shaderc_optimization_level {
+	shaderc_optimization_level_zero = 0,  // no optimization
+	shaderc_optimization_level_size = 1,  // optimize towards reducing code size
+	shaderc_optimization_level_performance = 2,  // optimize towards performance
+}
+
+// Resource limits.
+enum shaderc_limit {
+	shaderc_limit_max_lights = 0,
+	shaderc_limit_max_clip_planes = 1,
+	shaderc_limit_max_texture_units = 2,
+	shaderc_limit_max_texture_coords = 3,
+	shaderc_limit_max_vertex_attribs = 4,
+	shaderc_limit_max_vertex_uniform_components = 5,
+	shaderc_limit_max_varying_floats = 6,
+	shaderc_limit_max_vertex_texture_image_units = 7,
+	shaderc_limit_max_combined_texture_image_units = 8,
+	shaderc_limit_max_texture_image_units = 9,
+	shaderc_limit_max_fragment_uniform_components = 10,
+	shaderc_limit_max_draw_buffers = 11,
+	shaderc_limit_max_vertex_uniform_vectors = 12,
+	shaderc_limit_max_varying_vectors = 13,
+	shaderc_limit_max_fragment_uniform_vectors = 14,
+	shaderc_limit_max_vertex_output_vectors = 15,
+	shaderc_limit_max_fragment_input_vectors = 16,
+	shaderc_limit_min_program_texel_offset = 17,
+	shaderc_limit_max_program_texel_offset = 18,
+	shaderc_limit_max_clip_distances = 19,
+	shaderc_limit_max_compute_work_group_count_x = 20,
+	shaderc_limit_max_compute_work_group_count_y = 21,
+	shaderc_limit_max_compute_work_group_count_z = 22,
+	shaderc_limit_max_compute_work_group_size_x = 23,
+	shaderc_limit_max_compute_work_group_size_y = 24,
+	shaderc_limit_max_compute_work_group_size_z = 25,
+	shaderc_limit_max_compute_uniform_components = 26,
+	shaderc_limit_max_compute_texture_image_units = 27,
+	shaderc_limit_max_compute_image_uniforms = 28,
+	shaderc_limit_max_compute_atomic_counters = 29,
+	shaderc_limit_max_compute_atomic_counter_buffers = 30,
+	shaderc_limit_max_varying_components = 31,
+	shaderc_limit_max_vertex_output_components = 32,
+	shaderc_limit_max_geometry_input_components = 33,
+	shaderc_limit_max_geometry_output_components = 34,
+	shaderc_limit_max_fragment_input_components = 35,
+	shaderc_limit_max_image_units = 36,
+	shaderc_limit_max_combined_image_units_and_fragment_outputs = 37,
+	shaderc_limit_max_combined_shader_output_resources = 38,
+	shaderc_limit_max_image_samples = 39,
+	shaderc_limit_max_vertex_image_uniforms = 40,
+	shaderc_limit_max_tess_control_image_uniforms = 41,
+	shaderc_limit_max_tess_evaluation_image_uniforms = 42,
+	shaderc_limit_max_geometry_image_uniforms = 43,
+	shaderc_limit_max_fragment_image_uniforms = 44,
+	shaderc_limit_max_combined_image_uniforms = 45,
+	shaderc_limit_max_geometry_texture_image_units = 46,
+	shaderc_limit_max_geometry_output_vertices = 47,
+	shaderc_limit_max_geometry_total_output_components = 48,
+	shaderc_limit_max_geometry_uniform_components = 49,
+	shaderc_limit_max_geometry_varying_components = 50,
+	shaderc_limit_max_tess_control_input_components = 51,
+	shaderc_limit_max_tess_control_output_components = 52,
+	shaderc_limit_max_tess_control_texture_image_units = 53,
+	shaderc_limit_max_tess_control_uniform_components = 54,
+	shaderc_limit_max_tess_control_total_output_components = 55,
+	shaderc_limit_max_tess_evaluation_input_components = 56,
+	shaderc_limit_max_tess_evaluation_output_components = 57,
+	shaderc_limit_max_tess_evaluation_texture_image_units = 58,
+	shaderc_limit_max_tess_evaluation_uniform_components = 59,
+	shaderc_limit_max_tess_patch_components = 60,
+	shaderc_limit_max_patch_vertices = 61,
+	shaderc_limit_max_tess_gen_level = 62,
+	shaderc_limit_max_viewports = 63,
+	shaderc_limit_max_vertex_atomic_counters = 64,
+	shaderc_limit_max_tess_control_atomic_counters = 65,
+	shaderc_limit_max_tess_evaluation_atomic_counters = 66,
+	shaderc_limit_max_geometry_atomic_counters = 67,
+	shaderc_limit_max_fragment_atomic_counters = 68,
+	shaderc_limit_max_combined_atomic_counters = 69,
+	shaderc_limit_max_atomic_counter_bindings = 70,
+	shaderc_limit_max_vertex_atomic_counter_buffers = 71,
+	shaderc_limit_max_tess_control_atomic_counter_buffers = 72,
+	shaderc_limit_max_tess_evaluation_atomic_counter_buffers = 73,
+	shaderc_limit_max_geometry_atomic_counter_buffers = 74,
+	shaderc_limit_max_fragment_atomic_counter_buffers = 75,
+	shaderc_limit_max_combined_atomic_counter_buffers = 76,
+	shaderc_limit_max_atomic_counter_buffer_size = 77,
+	shaderc_limit_max_transform_feedback_buffers = 78,
+	shaderc_limit_max_transform_feedback_interleaved_components = 79,
+	shaderc_limit_max_cull_distances = 80,
+	shaderc_limit_max_combined_clip_and_cull_distances = 81,
+	shaderc_limit_max_samples = 82,
+}
+
+// Uniform resource kinds.
+// In Vulkan, uniform resources are bound to the pipeline via descriptors
+// with numbered bindings and sets.
+enum shaderc_uniform_kind {
+	// Image and image buffer.
+	shaderc_uniform_kind_image = 0,
+	// Pure sampler.
+	shaderc_uniform_kind_sampler = 1,
+	// Sampled texture in GLSL, and Shader Resource View in HLSL.
+	shaderc_uniform_kind_texture = 2,
+	// Uniform Buffer Object (UBO) in GLSL.  Cbuffer in HLSL.
+	shaderc_uniform_kind_buffer = 3,
+	// Shader Storage Buffer Object (SSBO) in GLSL.
+	shaderc_uniform_kind_storage_buffer = 4,
+	// Unordered Access View, in HLSL.  (Writable storage image or storage
+	// buffer.)
+	shaderc_uniform_kind_unordered_access_view = 5,
+}
+
+// Indicate the status of a compilation.
+enum shaderc_compilation_status {
+	shaderc_compilation_status_success = 0,
+	shaderc_compilation_status_invalid_stage = 1,  // error stage deduction
+	shaderc_compilation_status_compilation_error = 2,
+	shaderc_compilation_status_internal_error = 3,  // unexpected failure
+	shaderc_compilation_status_null_result_object = 4,
+	shaderc_compilation_status_invalid_assembly = 5,
+	shaderc_compilation_status_validation_error = 6,
+	shaderc_compilation_status_transformation_error = 7,
+	shaderc_compilation_status_configuration_error = 8,
+}
+
+enum shaderc_target_env {
+	shaderc_target_env_vulkan = 0,         // SPIR-V under Vulkan semantics
+	shaderc_target_env_opengl = 1,         // SPIR-V under OpenGL semantics
+	// NOTE: SPIR-V code generation is not supported for shaders under OpenGL
+	// compatibility profile.
+	shaderc_target_env_opengl_compat = 2,  // SPIR-V under OpenGL semantics,
+	                                       // including compatibility profile
+	                                       // functions
+	shaderc_target_env_webgpu = 3,         // Deprecated, SPIR-V under WebGPU
+	                                       // semantics
+	shaderc_target_env_default = shaderc_target_env_vulkan,
+}
+
+enum shaderc_env_version {
+	// For Vulkan, use Vulkan's mapping of version numbers to integers.
+	// See vulkan.h
+	shaderc_env_version_vulkan_1_0 = ((1 << 22)),
+	shaderc_env_version_vulkan_1_1 = ((1 << 22) | (1 << 12)),
+	shaderc_env_version_vulkan_1_2 = ((1 << 22) | (2 << 12)),
+	// For OpenGL, use the number from #version in shaders.
+	// TODO(dneto): Currently no difference between OpenGL 4.5 and 4.6.
+	// See glslang/Standalone/Standalone.cpp
+	// TODO(dneto): Glslang doesn't accept a OpenGL client version of 460.
+	shaderc_env_version_opengl_4_5 = 450,
+	shaderc_env_version_webgpu = 451,  // Deprecated, WebGPU env never defined versions
+}
+
+// The known versions of SPIR-V.
+enum shaderc_spirv_version {
+	// Use the values used for word 1 of a SPIR-V binary:
+	// - bits 24 to 31: zero
+	// - bits 16 to 23: major version number
+	// - bits 8 to 15: minor version number
+	// - bits 0 to 7: zero
+	shaderc_spirv_version_1_0 = 0x010000,
+	shaderc_spirv_version_1_1 = 0x010100,
+	shaderc_spirv_version_1_2 = 0x010200,
+	shaderc_spirv_version_1_3 = 0x010300,
+	shaderc_spirv_version_1_4 = 0x010400,
+	shaderc_spirv_version_1_5 = 0x010500,
+}
+
+// Usage examples:
+//
+// Aggressively release compiler resources, but spend time in initialization
+// for each new use.
+//      shaderc_compiler_t compiler = shaderc_compiler_initialize();
+//      shaderc_compilation_result_t result = shaderc_compile_into_spv(
+//          compiler, "#version 450\nvoid main() {}", 27,
+//          shaderc_glsl_vertex_shader, "main.vert", "main", nullptr);
+//      // Do stuff with compilation results.
+//      shaderc_result_release(result);
+//      shaderc_compiler_release(compiler);
+//
+// Keep the compiler object around for a long time, but pay for extra space
+// occupied.
+//      shaderc_compiler_t compiler = shaderc_compiler_initialize();
+//      // On the same, other or multiple simultaneous threads.
+//      shaderc_compilation_result_t result = shaderc_compile_into_spv(
+//          compiler, "#version 450\nvoid main() {}", 27,
+//          shaderc_glsl_vertex_shader, "main.vert", "main", nullptr);
+//      // Do stuff with compilation results.
+//      shaderc_result_release(result);
+//      // Once no more compilations are to happen.
+//      shaderc_compiler_release(compiler);
+
+struct shaderc_compiler;
+// An opaque handle to an object that manages all compiler state.
+alias shaderc_compiler_t = shaderc_compiler*;
+
+// Returns a shaderc_compiler_t that can be used to compile modules.
+// A return of NULL indicates that there was an error initializing the compiler.
+// Any function operating on shaderc_compiler_t must offer the basic
+// thread-safety guarantee.
+// [http://herbsutter.com/2014/01/13/gotw-95-solution-thread-safety-and-synchronization/]
+// That is: concurrent invocation of these functions on DIFFERENT objects needs
+// no synchronization; concurrent invocation of these functions on the SAME
+// object requires synchronization IF AND ONLY IF some of them take a non-const
+// argument.
+shaderc_compiler_t shaderc_compiler_initialize();
+
+// Releases the resources held by the shaderc_compiler_t.
+// After this call it is invalid to make any future calls to functions
+// involving this shaderc_compiler_t.
+void shaderc_compiler_release(shaderc_compiler_t);
+
+struct shaderc_compile_options;
+// An opaque handle to an object that manages options to a single compilation
+// result.
+alias shaderc_compile_options_t = shaderc_compile_options*;
+
+// Returns a default-initialized shaderc_compile_options_t that can be used
+// to modify the functionality of a compiled module.
+// A return of NULL indicates that there was an error initializing the options.
+// Any function operating on shaderc_compile_options_t must offer the
+// basic thread-safety guarantee.
+shaderc_compile_options_t shaderc_compile_options_initialize();
+
+// Returns a copy of the given shaderc_compile_options_t.
+// If NULL is passed as the parameter the call is the same as
+// shaderc_compile_options_init.
+shaderc_compile_options_t shaderc_compile_options_clone(
+	shaderc_compile_options_t options);
+
+// Releases the compilation options. It is invalid to use the given
+// shaderc_compile_options_t object in any future calls. It is safe to pass
+// NULL to this function, and doing such will have no effect.
+void shaderc_compile_options_release(shaderc_compile_options_t options);
+
+// Adds a predefined macro to the compilation options. This has the same
+// effect as passing -Dname=value to the command-line compiler.  If value
+// is NULL, it has the same effect as passing -Dname to the command-line
+// compiler. If a macro definition with the same name has previously been
+// added, the value is replaced with the new value. The macro name and
+// value are passed in with char pointers, which point to their data, and
+// the lengths of their data. The strings that the name and value pointers
+// point to must remain valid for the duration of the call, but can be
+// modified or deleted after this function has returned. In case of adding
+// a valueless macro, the value argument should be a null pointer or the
+// value_length should be 0u.
+void shaderc_compile_options_add_macro_definition(
+	shaderc_compile_options_t options, char* name, u64 name_length,
+	char* value, u64 value_length);
+
+// Sets the source language.  The default is GLSL.
+void shaderc_compile_options_set_source_language(
+	shaderc_compile_options_t options, shaderc_source_language lang);
+
+// Sets the compiler mode to generate debug information in the output.
+void shaderc_compile_options_set_generate_debug_info(
+	shaderc_compile_options_t options);
+
+// Sets the compiler optimization level to the given level. Only the last one
+// takes effect if multiple calls of this function exist.
+void shaderc_compile_options_set_optimization_level(
+	shaderc_compile_options_t options, shaderc_optimization_level level);
+
+// Forces the GLSL language version and profile to a given pair. The version
+// number is the same as would appear in the #version annotation in the source.
+// Version and profile specified here overrides the #version annotation in the
+// source. Use profile: 'shaderc_profile_none' for GLSL versions that do not
+// define profiles, e.g. versions below 150.
+void shaderc_compile_options_set_forced_version_profile(
+	shaderc_compile_options_t options, i32 version, shaderc_profile profile);
+
+// Source text inclusion via #include is supported with a pair of callbacks
+// to an "includer" on the client side.  The first callback processes an
+// inclusion request, and returns an include result.  The includer owns
+// the contents of the result, and those contents must remain valid until the
+// second callback is invoked to release the result.  Both callbacks take a
+// user_data argument to specify the client context.
+// To return an error, set the source_name to an empty string and put your
+// error message in content.
+
+// An include result.
+struct shaderc_include_result {
+	// The name of the source file.  The name should be fully resolved
+	// in the sense that it should be a unique name in the context of the
+	// includer.  For example, if the includer maps source names to files in
+	// a filesystem, then this name should be the absolute path of the file.
+	// For a failed inclusion, this string is empty.
+	char* source_name;
+	u64 source_name_length;
+	// The text contents of the source file in the normal case.
+	// For a failed inclusion, this contains the error message.
+	char* content;
+	u64 content_length;
+	// User data to be passed along with this request.
+	void* user_data;
+}
+
+// The kinds of include requests.
+enum shaderc_include_type {
+	shaderc_include_type_relative = 0,  // E.g. #include "source"
+	shaderc_include_type_standard = 1,  // E.g. #include <source>
+}
+
+// An includer callback type for mapping an #include request to an include
+// result.  The user_data parameter specifies the client context.  The
+// requested_source parameter specifies the name of the source being requested.
+// The type parameter specifies the kind of inclusion request being made.
+// The requesting_source parameter specifies the name of the source containing
+// the #include request.  The includer owns the result object and its contents,
+// and both must remain valid until the release callback is called on the result
+// object.
+alias shaderc_include_resolve_fn = shaderc_include_result* function(
+	void* user_data, char* requested_source, i32 type,
+	char* requesting_source, u64 include_depth);
+
+// An includer callback type for destroying an include result.
+alias shaderc_include_result_release_fn = void function(
+	void* user_data, shaderc_include_result* include_result);
+
+// Sets includer callback functions.
+void shaderc_compile_options_set_include_callbacks(
+	shaderc_compile_options_t options, shaderc_include_resolve_fn resolver,
+	shaderc_include_result_release_fn result_releaser, void* user_data);
+
+// Sets the compiler mode to suppress warnings, overriding warnings-as-errors
+// mode. When both suppress-warnings and warnings-as-errors modes are
+// turned on, warning messages will be inhibited, and will not be emitted
+// as error messages.
+void shaderc_compile_options_set_suppress_warnings(
+	shaderc_compile_options_t options);
+
+// Sets the target shader environment, affecting which warnings or errors will
+// be issued.  The version will be for distinguishing between different versions
+// of the target environment.  The version value should be either 0 or
+// a value listed in shaderc_env_version.  The 0 value maps to Vulkan 1.0 if
+// |target| is Vulkan, and it maps to OpenGL 4.5 if |target| is OpenGL.
+void shaderc_compile_options_set_target_env(
+	shaderc_compile_options_t options,
+	shaderc_target_env target,
+	u32 version);
+
+// Sets the target SPIR-V version. The generated module will use this version
+// of SPIR-V.  Each target environment determines what versions of SPIR-V
+// it can consume.  Defaults to the highest version of SPIR-V 1.0 which is
+// required to be supported by the target environment.  E.g. Default to SPIR-V
+// 1.0 for Vulkan 1.0 and SPIR-V 1.3 for Vulkan 1.1.
+void shaderc_compile_options_set_target_spirv(
+	shaderc_compile_options_t options, shaderc_spirv_version version);
+
+// Sets the compiler mode to treat all warnings as errors. Note the
+// suppress-warnings mode overrides this option, i.e. if both
+// warning-as-errors and suppress-warnings modes are set, warnings will not
+// be emitted as error messages.
+void shaderc_compile_options_set_warnings_as_errors(
+	shaderc_compile_options_t options);
+
+// Sets a resource limit.
+void shaderc_compile_options_set_limit(
+	shaderc_compile_options_t options, shaderc_limit limit, i32 value);
+
+// Sets whether the compiler should automatically assign bindings to uniforms
+// that aren't already explicitly bound in the shader source.
+void shaderc_compile_options_set_auto_bind_uniforms(
+	shaderc_compile_options_t options, bool auto_bind);
+
+// Sets whether the compiler should automatically remove sampler variables
+// and convert image variables to combined image-sampler variables.
+void shaderc_compile_options_set_auto_combined_image_sampler(
+	shaderc_compile_options_t options, bool upgrade);
+
+// Sets whether the compiler should use HLSL IO mapping rules for bindings.
+// Defaults to false.
+void shaderc_compile_options_set_hlsl_io_mapping(
+	shaderc_compile_options_t options, bool hlsl_iomap);
+
+// Sets whether the compiler should determine block member offsets using HLSL
+// packing rules instead of standard GLSL rules.  Defaults to false.  Only
+// affects GLSL compilation.  HLSL rules are always used when compiling HLSL.
+void shaderc_compile_options_set_hlsl_offsets(
+	shaderc_compile_options_t options, bool hlsl_offsets);
+
+// Sets the base binding number used for for a uniform resource type when
+// automatically assigning bindings.  For GLSL compilation, sets the lowest
+// automatically assigned number.  For HLSL compilation, the regsiter number
+// assigned to the resource is added to this specified base.
+void shaderc_compile_options_set_binding_base(
+	shaderc_compile_options_t options,
+	shaderc_uniform_kind kind,
+	u32 base);
+
+// Like shaderc_compile_options_set_binding_base, but only takes effect when
+// compiling a given shader stage.  The stage is assumed to be one of vertex,
+// fragment, tessellation evaluation, tesselation control, geometry, or compute.
+void shaderc_compile_options_set_binding_base_for_stage(
+	shaderc_compile_options_t options, shaderc_shader_kind shader_kind,
+	shaderc_uniform_kind kind, u32 base);
+
+// Sets whether the compiler should automatically assign locations to
+// uniform variables that don't have explicit locations in the shader source.
+void shaderc_compile_options_set_auto_map_locations(
+	shaderc_compile_options_t options, bool auto_map);
+
+// Sets a descriptor set and binding for an HLSL register in the given stage.
+// This method keeps a copy of the string data.
+void shaderc_compile_options_set_hlsl_register_set_and_binding_for_stage(
+	shaderc_compile_options_t options, shaderc_shader_kind shader_kind,
+	char* reg, char* set, char* binding);
+
+// Like shaderc_compile_options_set_hlsl_register_set_and_binding_for_stage,
+// but affects all shader stages.
+void shaderc_compile_options_set_hlsl_register_set_and_binding(
+	shaderc_compile_options_t options, char* reg, char* set,
+	char* binding);
+
+// Sets whether the compiler should enable extension
+// SPV_GOOGLE_hlsl_functionality1.
+void shaderc_compile_options_set_hlsl_functionality1(
+	shaderc_compile_options_t options, bool enable);
+
+// Sets whether the compiler should invert position.Y output in vertex shader.
+void shaderc_compile_options_set_invert_y(
+	shaderc_compile_options_t options, bool enable);
+
+// Sets whether the compiler generates code for max and min builtins which,
+// if given a NaN operand, will return the other operand. Similarly, the clamp
+// builtin will favour the non-NaN operands, as if clamp were implemented
+// as a composition of max and min.
+void shaderc_compile_options_set_nan_clamp(
+	shaderc_compile_options_t options, bool enable);
+
+struct shaderc_compilation_result;
+// An opaque handle to the results of a call to any shaderc_compile_into_*()
+// function.
+alias shaderc_compilation_result_t = shaderc_compilation_result*;
+
+// Takes a GLSL source string and the associated shader kind, input file
+// name, compiles it according to the given additional_options. If the shader
+// kind is not set to a specified kind, but shaderc_glslc_infer_from_source,
+// the compiler will try to deduce the shader kind from the source
+// string and a failure in deducing will generate an error. Currently only
+// #pragma annotation is supported. If the shader kind is set to one of the
+// default shader kinds, the compiler will fall back to the default shader
+// kind in case it failed to deduce the shader kind from source string.
+// The input_file_name is a null-termintated string. It is used as a tag to
+// identify the source string in cases like emitting error messages. It
+// doesn't have to be a 'file name'.
+// The source string will be compiled into SPIR-V binary and a
+// shaderc_compilation_result will be returned to hold the results.
+// The entry_point_name null-terminated string defines the name of the entry
+// point to associate with this GLSL source. If the additional_options
+// parameter is not null, then the compilation is modified by any options
+// present.  May be safely called from multiple threads without explicit
+// synchronization. If there was failure in allocating the compiler object,
+// null will be returned.
+shaderc_compilation_result_t shaderc_compile_into_spv(
+	shaderc_compiler_t compiler, char* source_text,
+	u64 source_text_size, shaderc_shader_kind shader_kind,
+	char* input_file_name, char* entry_point_name,
+	shaderc_compile_options_t additional_options);
+
+// Like shaderc_compile_into_spv, but the result contains SPIR-V assembly text
+// instead of a SPIR-V binary module.  The SPIR-V assembly syntax is as defined
+// by the SPIRV-Tools open source project.
+shaderc_compilation_result_t shaderc_compile_into_spv_assembly(
+	shaderc_compiler_t compiler, char* source_text,
+	u64 source_text_size, shaderc_shader_kind shader_kind,
+	char* input_file_name, char* entry_point_name,
+	shaderc_compile_options_t additional_options);
+
+// Like shaderc_compile_into_spv, but the result contains preprocessed source
+// code instead of a SPIR-V binary module
+shaderc_compilation_result_t shaderc_compile_into_preprocessed_text(
+	shaderc_compiler_t compiler, char* source_text,
+	u64 source_text_size, shaderc_shader_kind shader_kind,
+	char* input_file_name, char* entry_point_name,
+	shaderc_compile_options_t additional_options);
+
+// Takes an assembly string of the format defined in the SPIRV-Tools project
+// (https://github.com/KhronosGroup/SPIRV-Tools/blob/master/syntax.md),
+// assembles it into SPIR-V binary and a shaderc_compilation_result will be
+// returned to hold the results.
+// The assembling will pick options suitable for assembling specified in the
+// additional_options parameter.
+// May be safely called from multiple threads without explicit synchronization.
+// If there was failure in allocating the compiler object, null will be
+// returned.
+shaderc_compilation_result_t shaderc_assemble_into_spv(
+	shaderc_compiler_t compiler, char* source_assembly,
+	u64 source_assembly_size,
+	shaderc_compile_options_t additional_options);
+
+// The following functions, operating on shaderc_compilation_result_t objects,
+// offer only the basic thread-safety guarantee.
+
+// Releases the resources held by the result object. It is invalid to use the
+// result object for any further operations.
+void shaderc_result_release(shaderc_compilation_result_t result);
+
+// Returns the number of bytes of the compilation output data in a result
+// object.
+u64 shaderc_result_get_length(shaderc_compilation_result_t result);
+
+// Returns the number of warnings generated during the compilation.
+u64 shaderc_result_get_num_warnings(
+	shaderc_compilation_result_t result);
+
+// Returns the number of errors generated during the compilation.
+u64 shaderc_result_get_num_errors(shaderc_compilation_result_t result);
+
+// Returns the compilation status, indicating whether the compilation succeeded,
+// or failed due to some reasons, like invalid shader stage or compilation
+// errors.
+shaderc_compilation_status shaderc_result_get_compilation_status(
+	shaderc_compilation_result_t);
+
+// Returns a pointer to the start of the compilation output data bytes, either
+// SPIR-V binary or char string. When the source string is compiled into SPIR-V
+// binary, this is guaranteed to be castable to a uint32_t*. If the result
+// contains assembly text or preprocessed source text, the pointer will point to
+// the resulting array of characters.
+u8* shaderc_result_get_bytes(shaderc_compilation_result_t result);
+
+// Returns a null-terminated string that contains any error messages generated
+// during the compilation.
+char* shaderc_result_get_error_message(
+	shaderc_compilation_result_t result);
+
+// Provides the version & revision of the SPIR-V which will be produced
+void shaderc_get_spv_version(u32* version, u32* revision);
+
+// Parses the version and profile from a given null-terminated string
+// containing both version and profile, like: '450core'. Returns false if
+// the string can not be parsed. Returns true when the parsing succeeds. The
+// parsed version and profile are returned through arguments.
+bool shaderc_parse_version_profile(char* str, i32* version,
+								   shaderc_profile* profile);
