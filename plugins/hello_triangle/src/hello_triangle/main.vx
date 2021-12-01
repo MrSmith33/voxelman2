@@ -52,6 +52,7 @@ struct Client
 	VkFormat swapChainImageFormat;
 	VkExtent2D swapChainExtent;
 	VkImageView[] swapChainImageViews;
+	VkFramebuffer[] swapChainFramebuffers;
 
 	VkRenderPass renderPass;
 	VkPipelineLayout pipelineLayout;
@@ -102,6 +103,10 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+
+		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
+			vkDestroyFramebuffer(device, swapChainFramebuffers[i], null);
+		}
 
 		vkDestroyPipeline(device, graphicsPipeline, null);
 		vkDestroyPipelineLayout(device, pipelineLayout, null);
@@ -189,6 +194,8 @@ struct Client
 		createRenderPass();
 		if (!isRunning) return;
 		createGraphicsPipeline();
+		if (!isRunning) return;
+		createFramebuffers();
 	}
 
 	void createInstance()
@@ -742,6 +749,28 @@ struct Client
 
 		vkDestroyShaderModule(device, vertShaderModule, null);
 		vkDestroyShaderModule(device, fragShaderModule, null);
+	}
+
+	void createFramebuffers() {
+		swapChainFramebuffers = resizeArray[VkFramebuffer](swapChainFramebuffers, swapChainImageViews.length);
+
+		for (u64 i = 0; i < swapChainImageViews.length; i++) {
+			VkImageView[1] attachments;
+			attachments[0] = swapChainImageViews[i];
+
+			VkFramebufferCreateInfo framebufferInfo;
+			framebufferInfo.renderPass = renderPass;
+			framebufferInfo.attachmentCount = cast(u32)attachments.length;
+			framebufferInfo.pAttachments = attachments.ptr;
+			framebufferInfo.width = swapChainExtent.width;
+			framebufferInfo.height = swapChainExtent.height;
+			framebufferInfo.layers = 1;
+
+			if (vkCreateFramebuffer(device, &framebufferInfo, null, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+				println("failed to create framebuffer!");
+				isRunning = false;
+			}
+		}
 	}
 
 	u8[] compileShader(shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {
