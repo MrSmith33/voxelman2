@@ -58,6 +58,9 @@ struct Client
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
 
+	VkCommandPool commandPool;
+	VkCommandBuffer[] commandBuffers;
+
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
 
@@ -103,6 +106,8 @@ struct Client
 		mdbx_env_close_ex(mdbxEnv);
 
 		enet_deinitialize();
+
+		vkDestroyCommandPool(device, commandPool, null);
 
 		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
 			vkDestroyFramebuffer(device, swapChainFramebuffers[i], null);
@@ -196,6 +201,10 @@ struct Client
 		createGraphicsPipeline();
 		if (!isRunning) return;
 		createFramebuffers();
+		if (!isRunning) return;
+		createCommandPool();
+		if (!isRunning) return;
+		createCommandBuffers();
 	}
 
 	void createInstance()
@@ -768,6 +777,69 @@ struct Client
 
 			if (vkCreateFramebuffer(device, &framebufferInfo, null, &swapChainFramebuffers[i]) != VK_SUCCESS) {
 				println("failed to create framebuffer!");
+				isRunning = false;
+			}
+		}
+	}
+
+	void createCommandPool() {
+		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
+
+		VkCommandPoolCreateInfo poolInfo;
+		poolInfo.queueFamilyIndex = queueFamilyIndices.indices[QueueFamily.graphics];
+
+		if (vkCreateCommandPool(device, &poolInfo, null, &commandPool) != VK_SUCCESS) {
+			println("failed to create command pool!");
+			isRunning = false;
+		}
+	}
+
+	void createCommandBuffers() {
+		commandBuffers = resizeArray[VkCommandBuffer](commandBuffers, swapChainFramebuffers.length);
+
+		VkCommandBufferAllocateInfo allocInfo;
+		allocInfo.commandPool = commandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = cast(u32)commandBuffers.length;
+
+		if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.ptr) != VK_SUCCESS) {
+			println("failed to allocate command buffers!");
+			isRunning = false;
+			return;
+		}
+
+		for (u64 i = 0; i < commandBuffers.length; i++) {
+			VkCommandBufferBeginInfo beginInfo;
+
+			if (vkBeginCommandBuffer(commandBuffers[i], &beginInfo) != VK_SUCCESS) {
+				println("failed to begin recording command buffer!");
+				isRunning = false;
+			}
+
+			VkRenderPassBeginInfo renderPassInfo;
+			renderPassInfo.renderPass = renderPass;
+			renderPassInfo.framebuffer = swapChainFramebuffers[i];
+			renderPassInfo.renderArea.offset = VkOffset2D(0, 0);
+			renderPassInfo.renderArea.extent = swapChainExtent;
+
+			VkClearValue clearColor;
+			clearColor.color.float32[0] = 0.0;
+			clearColor.color.float32[1] = 0.0;
+			clearColor.color.float32[2] = 0.0;
+			clearColor.color.float32[3] = 1.0;
+			renderPassInfo.clearValueCount = 1;
+			renderPassInfo.pClearValues = &clearColor;
+
+			vkCmdBeginRenderPass(commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				vkCmdBindPipeline(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+				vkCmdDraw(commandBuffers[i], 3, 1, 0, 0);
+
+			vkCmdEndRenderPass(commandBuffers[i]);
+
+			if (vkEndCommandBuffer(commandBuffers[i]) != VK_SUCCESS) {
+				println("failed to record command buffer!");
 				isRunning = false;
 			}
 		}
