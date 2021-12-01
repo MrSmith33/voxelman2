@@ -55,6 +55,7 @@ struct Client
 
 	VkRenderPass renderPass;
 	VkPipelineLayout pipelineLayout;
+	VkPipeline graphicsPipeline;
 
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
@@ -102,6 +103,7 @@ struct Client
 
 		enet_deinitialize();
 
+		vkDestroyPipeline(device, graphicsPipeline, null);
 		vkDestroyPipelineLayout(device, pipelineLayout, null);
 		vkDestroyRenderPass(device, renderPass, null);
 
@@ -544,7 +546,7 @@ struct Client
 		createInfo.presentMode = presentMode;
 		createInfo.clipped = VK_TRUE;
 
-		createInfo.oldSwapchain = VK_NULL_HANDLE;
+		createInfo.oldSwapchain = null;
 
 		if (vkCreateSwapchainKHR(device, &createInfo, null, &swapChain) != VK_SUCCESS) {
 			println("failed to create swap chain!");
@@ -715,6 +717,26 @@ struct Client
 
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, &pipelineLayout) != VK_SUCCESS) {
 			println("failed to create pipeline layout!");
+			isRunning = false;
+		}
+
+		VkGraphicsPipelineCreateInfo pipelineInfo;
+		pipelineInfo.stageCount = 2;
+		pipelineInfo.pStages = shaderStages.ptr;
+		pipelineInfo.pVertexInputState = &vertexInputInfo;
+		pipelineInfo.pInputAssemblyState = &inputAssembly;
+		pipelineInfo.pViewportState = &viewportState;
+		pipelineInfo.pRasterizationState = &rasterizer;
+		pipelineInfo.pMultisampleState = &multisampling;
+		pipelineInfo.pDepthStencilState = null; // Optional
+		pipelineInfo.pColorBlendState = &colorBlending;
+		pipelineInfo.pDynamicState = null; // Optional
+		pipelineInfo.layout = pipelineLayout;
+		pipelineInfo.renderPass = renderPass;
+		pipelineInfo.subpass = 0;
+
+		if (vkCreateGraphicsPipelines(device, null, 1, &pipelineInfo, null, &graphicsPipeline) != VK_SUCCESS) {
+			println("failed to create graphics pipeline!");
 			isRunning = false;
 		}
 
