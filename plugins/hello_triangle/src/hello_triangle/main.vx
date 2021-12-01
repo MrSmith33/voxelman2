@@ -53,6 +53,7 @@ struct Client
 	VkExtent2D swapChainExtent;
 	VkImageView[] swapChainImageViews;
 
+	VkRenderPass renderPass;
 	VkPipelineLayout pipelineLayout;
 
 	enum WIDTH = 800;
@@ -102,6 +103,7 @@ struct Client
 		enet_deinitialize();
 
 		vkDestroyPipelineLayout(device, pipelineLayout, null);
+		vkDestroyRenderPass(device, renderPass, null);
 
 		for (u64 i = 0; i < swapChainImageViews.length; ++i) {
 			vkDestroyImageView(device, swapChainImageViews[i], null);
@@ -181,6 +183,8 @@ struct Client
 		createSwapChain();
 		if (!isRunning) return;
 		createImageViews();
+		if (!isRunning) return;
+		createRenderPass();
 		if (!isRunning) return;
 		createGraphicsPipeline();
 	}
@@ -582,6 +586,38 @@ struct Client
 				isRunning = false;
 				return;
 			}
+		}
+	}
+
+	void createRenderPass() {
+		VkAttachmentDescription colorAttachment;
+		colorAttachment.format = swapChainImageFormat;
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+		VkAttachmentReference colorAttachmentRef;
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpass;
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+
+		VkRenderPassCreateInfo renderPassInfo;
+		renderPassInfo.attachmentCount = 1;
+		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
+
+		if (vkCreateRenderPass(device, &renderPassInfo, null, &renderPass) != VK_SUCCESS) {
+			println("failed to create render pass!");
+			isRunning = false;
 		}
 	}
 
