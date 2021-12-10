@@ -61,6 +61,13 @@ struct Client
 	VkCommandPool commandPool;
 	VkCommandBuffer[] commandBuffers;
 
+	VkSemaphore[] imageAvailableSemaphores;
+    VkSemaphore[] renderFinishedSemaphores;
+    VkFence[] inFlightFences;
+    VkFence[] imagesInFlight;
+    u32 currentFrame = 0;
+
+	enum MAX_FRAMES_IN_FLIGHT = 2;
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
 
@@ -107,6 +114,12 @@ struct Client
 
 		enet_deinitialize();
 
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], null);
+            vkDestroyFence(device, inFlightFences[i], null);
+        }
+
 		vkDestroyCommandPool(device, commandPool, null);
 
 		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
@@ -123,7 +136,6 @@ struct Client
 		swapChainImageViews = freeArray[VkImageView](swapChainImageViews);
 
 		vkDestroySwapchainKHR(device, swapChain, null);
-		vkDeviceWaitIdle(device);
 		vkDestroyDevice(device, null);
 
 		if (enableValidationLayers) {
@@ -142,7 +154,10 @@ struct Client
 			___tracy_emit_frame_mark();
 
 			update();
+			drawFrame();
 		}
+
+		vkDeviceWaitIdle(device);
 	}
 
 	void update()
@@ -205,6 +220,8 @@ struct Client
 		createCommandPool();
 		if (!isRunning) return;
 		createCommandBuffers();
+		if (!isRunning) return;
+		createSyncObjects();
 	}
 
 	void createInstance()
@@ -843,6 +860,77 @@ struct Client
 				isRunning = false;
 			}
 		}
+	}
+
+	void createSyncObjects() {
+		imageAvailableSemaphores = resizeArray[VkSemaphore](imageAvailableSemaphores, MAX_FRAMES_IN_FLIGHT);
+		renderFinishedSemaphores = resizeArray[VkSemaphore](renderFinishedSemaphores, MAX_FRAMES_IN_FLIGHT);
+		inFlightFences = resizeArray[VkFence](inFlightFences, MAX_FRAMES_IN_FLIGHT);
+		imagesInFlight = resizeArray[VkFence](imagesInFlight, swapChainImages.length);
+
+		VkSemaphoreCreateInfo semaphoreInfo;
+
+		VkFenceCreateInfo fenceInfo;
+		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+			if (vkCreateSemaphore(device, &semaphoreInfo, null, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
+				vkCreateSemaphore(device, &semaphoreInfo, null, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+				vkCreateFence(device, &fenceInfo, null, &inFlightFences[i]) != VK_SUCCESS) {
+				println("failed to create synchronization objects for a frame!");
+				isRunning = false;
+			}
+		}
+	}
+
+	void drawFrame() {
+		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, u64.max);
+
+		u32 imageIndex;
+		vkAcquireNextImageKHR(device, swapChain, u64.max, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+		// Check if a previous frame is using this image (i.e. there is its fence to wait on)
+		if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+			vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, u64.max);
+		}
+		// Mark the image as now being in use by this frame
+		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
+
+		VkSubmitInfo submitInfo;
+
+		VkSemaphore waitSemaphore = imageAvailableSemaphores[currentFrame];
+		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		submitInfo.waitSemaphoreCount = 1;
+		submitInfo.pWaitSemaphores = &waitSemaphore;
+		submitInfo.pWaitDstStageMask = &waitStage;
+
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+
+		VkSemaphore signalSemaphore = renderFinishedSemaphores[currentFrame];
+		submitInfo.signalSemaphoreCount = 1;
+		submitInfo.pSignalSemaphores = &signalSemaphore;
+
+		vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
+		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+			println("failed to submit draw command buffer!");
+			isRunning = false;
+		}
+
+		VkPresentInfoKHR presentInfo;
+
+		presentInfo.waitSemaphoreCount = 1;
+		presentInfo.pWaitSemaphores = &signalSemaphore;
+
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = &swapChain;
+
+		presentInfo.pImageIndices = &imageIndex;
+
+		vkQueuePresentKHR(presentQueue, &presentInfo);
+
+		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
 	u8[] compileShader(shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {

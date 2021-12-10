@@ -42,13 +42,7 @@ void main() {
 		if (e.isICE) throw e;
 		return;
 	} catch(Throwable e) {
-		driver.context.print_analysis_stack;
 		writeln(driver.context.errorSink.text);
-		auto func = driver.context.currentFunction;
-		if (func) {
-			auto mod = func._module.get!ModuleDeclNode(&driver.context);
-			writefln("Failed in %s.%s", driver.context.idString(mod.id), driver.context.idString(func.id));
-		}
 		throw e;
 	}
 	driver.markCodeAsExecutable();

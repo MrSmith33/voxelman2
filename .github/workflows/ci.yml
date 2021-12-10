@@ -29,7 +29,7 @@ jobs:
         run: |
           curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
           7z x -ba -bso0 -bsp0 lib.7z
-          ldc2 -m64 -g -d-version=PRETTY_ASSERT -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+          ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
 
   build-ldc-release:
     name: LDC release
@@ -46,7 +46,7 @@ jobs:
         run: |
           curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
           7z x -ba -bso0 -bsp0 lib.7z
-          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -d-version=PRETTY_ASSERT -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
 
   build-dmd:
     name: DMD debug
@@ -65,4 +65,4 @@ jobs:
       - name: Try build
         shell: cmd
         run: |
-          dmd -m64 -g -version=PRETTY_ASSERT -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+          dmd -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
