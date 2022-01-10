@@ -13,13 +13,17 @@ import core.vulkan.types;
 
 void run()
 {
+	__init_utils();
+
+	___tracy_set_thread_name("main");
+
 	Client client;
 	client.run();
 }
 
+enum TRACY_ON = 1;
+
 u8[] frame_name = "Frame";
-TracyLoc zone_loc1 = TracyLoc("glfwPollEvents", "update()", "main.vx", 83, 0x00AA00);
-TracyLoc zone_loc2 = TracyLoc("sleep(1)", "update()", "main.vx", 85, 0x00CC00);
 
 struct SwapChainSupportDetails {
 	VkSurfaceCapabilitiesKHR  capabilities;
@@ -62,14 +66,16 @@ struct Client
 	VkCommandBuffer[] commandBuffers;
 
 	VkSemaphore[] imageAvailableSemaphores;
-    VkSemaphore[] renderFinishedSemaphores;
-    VkFence[] inFlightFences;
-    VkFence[] imagesInFlight;
-    u32 currentFrame = 0;
+	VkSemaphore[] renderFinishedSemaphores;
+	VkFence[] inFlightFences;
+	VkFence[] imagesInFlight;
+	u32 currentFrame = 0;
 
-	enum MAX_FRAMES_IN_FLIGHT = 2;
+	enum u32 MAX_FRAMES_IN_FLIGHT = 2;
 	enum WIDTH = 800;
 	enum HEIGHT = 600;
+
+	enum PRESENT_MODE = VK_PRESENT_MODE_MAILBOX_KHR;
 
 	bool enableValidationLayers = true;
 	u8*[1] validationLayers;
@@ -79,15 +85,15 @@ struct Client
 
 	void run()
 	{
-		println("Start");
 		init();
 		mainLoop();
 		free();
-		println("Shutdown");
 	}
 
 	void init()
 	{
+		@static TracyLoc zone = TracyLoc(null, "Client.init", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
 
@@ -95,10 +101,15 @@ struct Client
 		initVulkan();
 		if (!isRunning) return;
 
+		@static TracyLoc zone1 = TracyLoc(null, "enet_initialize", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		enet_initialize();
+		___tracy_emit_zone_end(ctx1);
 
 		u8[] path = "test.db";
+		@static TracyLoc zone2 = TracyLoc(null, "mdbx_env_create", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		mdbx_env_create(&mdbxEnv);
+		___tracy_emit_zone_end(ctx2);
+		@static TracyLoc zone3 = TracyLoc(null, "mdbx_env_open", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx3 = ___tracy_emit_zone_begin(&zone3, TRACY_ON);
 		mdbx_env_open(
 			mdbxEnv,
 			path.ptr,
@@ -106,19 +117,34 @@ struct Client
 			MDBX_env_flags_t.MDBX_EXCLUSIVE,
 			//rwx_rwx_rwx
 			0b110_110_110);
+		___tracy_emit_zone_end(ctx3);
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void free()
 	{
-		mdbx_env_close_ex(mdbxEnv);
+		@static TracyLoc zone = TracyLoc(null, "Client.free", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
 
+		mdbx_env_close_ex(mdbxEnv);
 		enet_deinitialize();
+		freeVulkan();
+		freeWindow();
+
+		___tracy_emit_zone_end(ctx);
+	}
+
+	void freeVulkan()
+	{
+		@static TracyLoc zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		vkDeviceWaitIdle(device);
 
 		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-            vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
-            vkDestroySemaphore(device, imageAvailableSemaphores[i], null);
-            vkDestroyFence(device, inFlightFences[i], null);
-        }
+			vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
+			vkDestroySemaphore(device, imageAvailableSemaphores[i], null);
+			vkDestroyFence(device, inFlightFences[i], null);
+		}
 
 		vkDestroyCommandPool(device, commandPool, null);
 
@@ -144,51 +170,76 @@ struct Client
 
 		vkDestroySurfaceKHR(instance, surface, null);
 		vkDestroyInstance(instance, null);
+
+		___tracy_emit_zone_end(ctx);
+	}
+
+	void freeWindow()
+	{
+		@static TracyLoc zone = TracyLoc(null, "Client.freeWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		glfwDestroyWindow(window);
 		glfwTerminate();
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void mainLoop()
 	{
 		while(isRunning && !glfwWindowShouldClose(window)) {
-			___tracy_emit_frame_mark();
-
 			update();
 			drawFrame();
+			___tracy_emit_frame_mark();
 		}
-
-		vkDeviceWaitIdle(device);
 	}
 
 	void update()
 	{
-		TracyZoneCtx tracy_ctx1 = ___tracy_emit_zone_begin(&zone_loc1, 1);
+		@static TracyLoc zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = ___tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
 		glfwPollEvents();
 		___tracy_emit_zone_end(tracy_ctx1);
-		TracyZoneCtx tracy_ctx2 = ___tracy_emit_zone_begin(&zone_loc2, 1);
-		Sleep(1);
-		___tracy_emit_zone_end(tracy_ctx2);
+		//@static TracyLoc zone_loc2 = TracyLoc(null, "sleep(1)", "main.vx", cast(u32)__LINE__, 0x00CC00); TracyZoneCtx tracy_ctx2 = ___tracy_emit_zone_begin(&zone_loc2, TRACY_ON);
+		//Sleep(1);
+		//___tracy_emit_zone_end(tracy_ctx2);
 	}
 
 	void initWindow()
 	{
+		@static TracyLoc zone1 = TracyLoc(null, "Client.initWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
+
+		@static TracyLoc zone2 = TracyLoc(null, "glfwInit", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwInit = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		if (!glfwInit()) {
 			println("GLFW init failed");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx_glfwInit);
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
+		___tracy_emit_zone_end(ctx_glfwInit);
 
 		// Do not create OpenGL context
+		@static TracyLoc zone3 = TracyLoc(null, "glfwWindowHint", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwWindowHint = ___tracy_emit_zone_begin(&zone3, TRACY_ON);
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		___tracy_emit_zone_end(ctx_glfwWindowHint);
 
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman", null, null);
+		@static TracyLoc zone4 = TracyLoc(null, "glfwCreateWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwCreateWindow = ___tracy_emit_zone_begin(&zone4, TRACY_ON);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Hello Triangle", null, null);
+		___tracy_emit_zone_end(ctx_glfwCreateWindow);
 
+		@static TracyLoc zone5 = TracyLoc(null, "glfwCreateWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwSetWindowUserPointer = ___tracy_emit_zone_begin(&zone5, TRACY_ON);
 		glfwSetWindowUserPointer(window, this);
+		___tracy_emit_zone_end(ctx_glfwSetWindowUserPointer);
+		@static TracyLoc zone6 = TracyLoc(null, "glfwCreateWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwSetKeyCallback = ___tracy_emit_zone_begin(&zone6, TRACY_ON);
 		glfwSetKeyCallback(window, &glfw_key_callback);
+		___tracy_emit_zone_end(ctx_glfwSetKeyCallback);
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void initVulkan()
 	{
+		@static TracyLoc zone = TracyLoc(null, "Client.initVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		if (!glfwVulkanSupported) {
 			println("Vulkan is not supported");
 			isRunning = false;
@@ -222,10 +273,14 @@ struct Client
 		createCommandBuffers();
 		if (!isRunning) return;
 		createSyncObjects();
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createInstance()
 	{
+		@static TracyLoc zone = TracyLoc(null, "Client.createInstance", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		VkApplicationInfo appInfo;
 		appInfo.pApplicationName = "Hello Triangle";
 		appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -253,7 +308,6 @@ struct Client
 			} else {
 				createInfo.enabledLayerCount = cast(u32)validationLayers.length;
 				createInfo.ppEnabledLayerNames = validationLayers.ptr;
-				println("Validation ", createInfo.enabledLayerCount, " ", createInfo.ppEnabledLayerNames[0], " ", this);
 
 				populateDebugMessengerCreateInfo(&debugCreateInfo);
 				createInfo.pNext = &debugCreateInfo;
@@ -263,14 +317,22 @@ struct Client
 		}
 
 		println("vkCreateInstance ", cast(void*)vkCreateInstance, " ", cast(void*)&createInfo, " ", cast(void*)&appInfo);
+
+		@static TracyLoc zone1 = TracyLoc(null, "vkCreateInstance", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		i32 vkCreateInstanceResult = cast(i32)vkCreateInstance(&createInfo, null, &instance);
+		___tracy_emit_zone_end(ctx1);
+
 		if (vkCreateInstanceResult != VK_SUCCESS) {
 			println("vkCreateInstance failed: ", vkCreateInstanceResult);
 			isRunning = false;
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
 		println("VkInstance ", cast(void*)instance);
+
+		@static TracyLoc zone2 = TracyLoc(null, "loadInstanceLevelFunctions", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		loadInstanceLevelFunctions(instance);
+		___tracy_emit_zone_end(ctx2);
 
 		{
 			u32 extensionCount;
@@ -283,6 +345,8 @@ struct Client
 			}
 			freeArray[VkExtensionProperties](extensions);
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo) {
@@ -294,7 +358,12 @@ struct Client
 	}
 
 	void setupDebugMessenger() {
-		if (!enableValidationLayers) return;
+		@static TracyLoc zone = TracyLoc(null, "Client.setupDebugMessenger", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		if (!enableValidationLayers) {
+			___tracy_emit_zone_end(ctx);
+			return;
+		}
 
 		VkDebugUtilsMessengerCreateInfoEXT createInfo;
 		populateDebugMessengerCreateInfo(&createInfo);
@@ -303,16 +372,24 @@ struct Client
 			println("failed to set up debug messenger!");
 			isRunning = false;
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createSurface() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createSurface", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		if (glfwCreateWindowSurface(instance, window, null, &surface) != VK_SUCCESS) {
 			println("failed to create window surface!");
 			isRunning = false;
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	bool checkValidationLayerSupport() {
+		@static TracyLoc zone = TracyLoc(null, "Client.checkValidationLayerSupport", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		u32 layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, null);
 		VkLayerProperties[] availableLayers = makeArray[VkLayerProperties](layerCount);
@@ -324,6 +401,7 @@ struct Client
 		println("has VK_LAYER_KHRONOS_validation: ", hasAllLayers);
 		freeArray[VkLayerProperties](availableLayers);
 
+		___tracy_emit_zone_end(ctx);
 		return hasAllLayers;
 	}
 
@@ -343,12 +421,15 @@ struct Client
 	}
 
 	void pickPhysicalDevice() {
+		@static TracyLoc zone = TracyLoc(null, "Client.pickPhysicalDevice", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		u32 deviceCount = 0;
 		vkEnumeratePhysicalDevices(instance, &deviceCount, null);
 
 		if (deviceCount == 0) {
 			println("failed to find GPUs with Vulkan support!");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
 
@@ -371,10 +452,13 @@ struct Client
 		if (physicalDevice == null) {
 			println("failed to find a suitable GPU!");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
 
 		println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	// negative score means that device is unsuitable
@@ -472,6 +556,8 @@ struct Client
 	}
 
 	void createLogicalDevice() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createLogicalDevice", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
 		println("Queues");
 		println("  Graphics: ", indices.indices[QueueFamily.graphics]);
@@ -520,11 +606,14 @@ struct Client
 		VkPhysicalDeviceFeatures deviceFeatures;
 		createInfo.pEnabledFeatures = &deviceFeatures;
 
+		@static TracyLoc zone1 = TracyLoc(null, "vkCreateDevice", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		VkResult vkCreateDeviceResult = vkCreateDevice(physicalDevice, &createInfo, null, &device);
+		___tracy_emit_zone_end(ctx1);
 		queueCreateInfos.free();
 		if (vkCreateDeviceResult != VK_SUCCESS) {
 			println("failed to create logical device: ");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
 		println("Logical device ", device);
@@ -532,15 +621,21 @@ struct Client
 
 		// Load functions of this specific device. Only support single device for now
 		// For multiple devices either use `loadDeviceLevelFunctions` or `DispatchDevice`
+		@static TracyLoc zone2 = TracyLoc(null, "loadDeviceLevelFunctionsDirect", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		loadDeviceLevelFunctionsDirect(device);
+		___tracy_emit_zone_end(ctx2);
 
 
 		// Retreive queue handles of queues we requested
 		vkGetDeviceQueue(device, indices.indices[QueueFamily.graphics], 0, &graphicsQueue);
 		vkGetDeviceQueue(device, indices.indices[QueueFamily.present],  0, &presentQueue);
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createSwapChain() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -581,11 +676,15 @@ struct Client
 
 		createInfo.oldSwapchain = null;
 
+		@static TracyLoc zone2 = TracyLoc(null, "vkCreateSwapchainKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_vkCreateSwapchainKHR = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		if (vkCreateSwapchainKHR(device, &createInfo, null, &swapChain) != VK_SUCCESS) {
 			println("failed to create swap chain!");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx_vkCreateSwapchainKHR);
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
+		___tracy_emit_zone_end(ctx_vkCreateSwapchainKHR);
 
 		u32 swapChainImageCount;
 		vkGetSwapchainImagesKHR(device, swapChain, &swapChainImageCount, null);
@@ -596,9 +695,13 @@ struct Client
 		swapChainExtent = extent;
 
 		swapChainSupport.free();
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createImageViews() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createImageViews", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		swapChainImageViews = resizeArray[VkImageView](swapChainImageViews, swapChainImages.length);
 
 		for (u64 i = 0; i < swapChainImages.length; ++i) {
@@ -619,12 +722,16 @@ struct Client
 			if (vkCreateImageView(device, &createInfo, null, &swapChainImageViews[i]) != VK_SUCCESS) {
 				println("failed to create image views!");
 				isRunning = false;
+				___tracy_emit_zone_end(ctx);
 				return;
 			}
 		}
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createRenderPass() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createRenderPass", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		VkAttachmentDescription colorAttachment;
 		colorAttachment.format = swapChainImageFormat;
 		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -654,12 +761,24 @@ struct Client
 			println("failed to create render pass!");
 			isRunning = false;
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createGraphicsPipeline() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createGraphicsPipeline", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		@static TracyLoc zone1 = TracyLoc("vertShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		u8[] vertShaderSource = readFile("../plugins/hello_triangle/res/shader.vert");
+		___tracy_emit_zone_end(ctx1);
+		@static TracyLoc zone2 = TracyLoc("fragShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		u8[] fragShaderSource = readFile("../plugins/hello_triangle/res/shader.frag");
-		if (!isRunning) return;
+		___tracy_emit_zone_end(ctx2);
+
+		if (!isRunning) {
+			___tracy_emit_zone_end(ctx);
+			return;
+		}
 
 		shaderc_compiler_t compiler = shaderc_compiler_initialize();
 		u8[] vertShaderCode = compileShader(compiler, vertShaderSource, "shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
@@ -667,7 +786,9 @@ struct Client
 		if (vertShaderCode.length == 0 || fragShaderCode.length == 0) {
 			isRunning = false; // error compiling
 		}
+		@static TracyLoc zone3 = TracyLoc(null, "shaderc_compiler_release", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx3 = ___tracy_emit_zone_begin(&zone3, TRACY_ON);
 		shaderc_compiler_release(compiler);
+		___tracy_emit_zone_end(ctx3);
 
 		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
 		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -748,10 +869,12 @@ struct Client
 		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 		pipelineLayoutInfo.pPushConstantRanges = null; // Optional
 
+		@static TracyLoc zone4 = TracyLoc(null, "vkCreatePipelineLayout", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = ___tracy_emit_zone_begin(&zone4, TRACY_ON);
 		if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, null, &pipelineLayout) != VK_SUCCESS) {
 			println("failed to create pipeline layout!");
 			isRunning = false;
 		}
+		___tracy_emit_zone_end(ctx4);
 
 		VkGraphicsPipelineCreateInfo pipelineInfo;
 		pipelineInfo.stageCount = 2;
@@ -768,16 +891,22 @@ struct Client
 		pipelineInfo.renderPass = renderPass;
 		pipelineInfo.subpass = 0;
 
+		@static TracyLoc zone5 = TracyLoc(null, "vkCreatePipelineLayout", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx5 = ___tracy_emit_zone_begin(&zone5, TRACY_ON);
 		if (vkCreateGraphicsPipelines(device, null, 1, &pipelineInfo, null, &graphicsPipeline) != VK_SUCCESS) {
 			println("failed to create graphics pipeline!");
 			isRunning = false;
 		}
+		___tracy_emit_zone_end(ctx5);
 
 		vkDestroyShaderModule(device, vertShaderModule, null);
 		vkDestroyShaderModule(device, fragShaderModule, null);
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createFramebuffers() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createFramebuffers", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		swapChainFramebuffers = resizeArray[VkFramebuffer](swapChainFramebuffers, swapChainImageViews.length);
 
 		for (u64 i = 0; i < swapChainImageViews.length; i++) {
@@ -797,9 +926,13 @@ struct Client
 				isRunning = false;
 			}
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createCommandPool() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createCommandPool", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice);
 
 		VkCommandPoolCreateInfo poolInfo;
@@ -809,9 +942,13 @@ struct Client
 			println("failed to create command pool!");
 			isRunning = false;
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createCommandBuffers() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createCommandBuffers", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		commandBuffers = resizeArray[VkCommandBuffer](commandBuffers, swapChainFramebuffers.length);
 
 		VkCommandBufferAllocateInfo allocInfo;
@@ -822,6 +959,7 @@ struct Client
 		if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.ptr) != VK_SUCCESS) {
 			println("failed to allocate command buffers!");
 			isRunning = false;
+			___tracy_emit_zone_end(ctx);
 			return;
 		}
 
@@ -860,9 +998,13 @@ struct Client
 				isRunning = false;
 			}
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void createSyncObjects() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createSyncObjects", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		imageAvailableSemaphores = resizeArray[VkSemaphore](imageAvailableSemaphores, MAX_FRAMES_IN_FLIGHT);
 		renderFinishedSemaphores = resizeArray[VkSemaphore](renderFinishedSemaphores, MAX_FRAMES_IN_FLIGHT);
 		inFlightFences = resizeArray[VkFence](inFlightFences, MAX_FRAMES_IN_FLIGHT);
@@ -881,17 +1023,27 @@ struct Client
 				isRunning = false;
 			}
 		}
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	void drawFrame() {
+		@static TracyLoc zone = TracyLoc(null, "Client.drawFrame", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		@static TracyLoc zone1 = TracyLoc(null, "vkWaitForFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, u64.max);
+		___tracy_emit_zone_end(ctx1);
 
 		u32 imageIndex;
+		@static TracyLoc zone2 = TracyLoc(null, "vkAcquireNextImageKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		vkAcquireNextImageKHR(device, swapChain, u64.max, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		___tracy_emit_zone_end(ctx2);
 
 		// Check if a previous frame is using this image (i.e. there is its fence to wait on)
 		if (imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+			@static TracyLoc zone3 = TracyLoc(null, "vkWaitForFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx3 = ___tracy_emit_zone_begin(&zone3, TRACY_ON);
 			vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, u64.max);
+			___tracy_emit_zone_end(ctx3);
 		}
 		// Mark the image as now being in use by this frame
 		imagesInFlight[imageIndex] = inFlightFences[currentFrame];
@@ -911,12 +1063,16 @@ struct Client
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = &signalSemaphore;
 
+		@static TracyLoc zone4 = TracyLoc(null, "vkResetFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = ___tracy_emit_zone_begin(&zone4, TRACY_ON);
 		vkResetFences(device, 1, &inFlightFences[currentFrame]);
+		___tracy_emit_zone_end(ctx4);
 
+		@static TracyLoc zone5 = TracyLoc(null, "vkQueueSubmit", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx5 = ___tracy_emit_zone_begin(&zone5, TRACY_ON);
 		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
 			println("failed to submit draw command buffer!");
 			isRunning = false;
 		}
+		___tracy_emit_zone_end(ctx5);
 
 		VkPresentInfoKHR presentInfo;
 
@@ -928,15 +1084,23 @@ struct Client
 
 		presentInfo.pImageIndices = &imageIndex;
 
+		@static TracyLoc zone6 = TracyLoc(null, "vkQueuePresentKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx6 = ___tracy_emit_zone_begin(&zone6, TRACY_ON);
 		vkQueuePresentKHR(presentQueue, &presentInfo);
+		___tracy_emit_zone_end(ctx6);
 
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+		___tracy_emit_zone_end(ctx);
 	}
 
 	u8[] compileShader(shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {
+		@static TracyLoc zone = TracyLoc(null, "Client.compileShader", "main.vx", cast(u32)__LINE__, 0xAAAA00); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		@static TracyLoc zone1 = TracyLoc(null, "shaderc_compile_into_spv", "main.vx", cast(u32)__LINE__, 0xAAAA00); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		shaderc_compilation_result_t result = shaderc_compile_into_spv(
 			compiler, source.ptr, source.length,
 			shader_kind, filename.ptr, entryname, null);
+		___tracy_emit_zone_end(ctx1);
 
 		u64 numWarnings = shaderc_result_get_num_warnings(result);
 		u64 numErrors = shaderc_result_get_num_errors(result);
@@ -957,10 +1121,14 @@ struct Client
 
 		shaderc_result_release(result);
 
+		___tracy_emit_zone_end(ctx);
+
 		return code;
 	}
 
 	VkShaderModule createShaderModule(u8[] code) {
+		@static TracyLoc zone = TracyLoc(null, "Client.createShaderModule", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		VkShaderModuleCreateInfo createInfo;
 		createInfo.codeSize = code.length; // size is in bytes
 		createInfo.pCode = cast(u32*)code.ptr;
@@ -970,32 +1138,48 @@ struct Client
 			println("failed to create shader module!");
 			isRunning = false;
 		}
+
+		___tracy_emit_zone_end(ctx);
+
 		return shaderModule;
 	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(Array[VkSurfaceFormatKHR] availableFormats) {
+		@static TracyLoc zone = TracyLoc(null, "Client.chooseSwapSurfaceFormat", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		for (u32 i = 0; i < availableFormats.length; ++i) {
 			VkSurfaceFormatKHR availableFormat = availableFormats.ptr[i];
 			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				___tracy_emit_zone_end(ctx);
 				return availableFormat;
 			}
 		}
+
+		___tracy_emit_zone_end(ctx);
 
 		return availableFormats.ptr[0];
 	}
 
 	VkPresentModeKHR chooseSwapPresentMode(Array[VkPresentModeKHR] availablePresentModes) {
+		@static TracyLoc zone = TracyLoc(null, "Client.chooseSwapPresentMode", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
 		for (u32 i = 0; i < availablePresentModes.length; ++i) {
 			VkPresentModeKHR availablePresentMode = availablePresentModes.ptr[i];
-			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			if (availablePresentMode == PRESENT_MODE) {
+				___tracy_emit_zone_end(ctx);
 				return availablePresentMode;
 			}
 		}
+
+		___tracy_emit_zone_end(ctx);
+
 		return VK_PRESENT_MODE_FIFO_KHR;
 	}
 
 	VkExtent2D chooseSwapExtent(VkSurfaceCapabilitiesKHR capabilities) {
+		@static TracyLoc zone = TracyLoc(null, "Client.chooseSwapExtent", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
+
 		if (capabilities.currentExtent.width != u32.max) {
+			___tracy_emit_zone_end(ctx);
 			return capabilities.currentExtent;
 		} else {
 			i32 width;
@@ -1007,31 +1191,46 @@ struct Client
 			actualExtent.width = clamp[u32](actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
 			actualExtent.height = clamp[u32](actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
+			___tracy_emit_zone_end(ctx);
 			return actualExtent;
 		}
 	}
 
 	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
+		@static TracyLoc zone = TracyLoc(null, "Client.querySwapChainSupport", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = ___tracy_emit_zone_begin(&zone, TRACY_ON);
 		SwapChainSupportDetails details;
 
+		@static TracyLoc zone1 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = ___tracy_emit_zone_begin(&zone1, TRACY_ON);
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+		___tracy_emit_zone_end(ctx1);
 
 		u32 formatCount;
+		@static TracyLoc zone2 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = ___tracy_emit_zone_begin(&zone2, TRACY_ON);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, null);
+		___tracy_emit_zone_end(ctx2);
 
 		if (formatCount) {
 			VkSurfaceFormatKHR* ptr = details.formats.putVoid(formatCount);
+			@static TracyLoc zone3 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx3 = ___tracy_emit_zone_begin(&zone3, TRACY_ON);
 			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, ptr);
+			___tracy_emit_zone_end(ctx3);
 		}
 
 		u32 presentModeCount;
+		@static TracyLoc zone4 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = ___tracy_emit_zone_begin(&zone4, TRACY_ON);
 		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, null);
+		___tracy_emit_zone_end(ctx4);
 
 		if (presentModeCount != 0) {
+			@static TracyLoc zone4 = TracyLoc(null, "details.presentModes.putVoid", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = ___tracy_emit_zone_begin(&zone4, TRACY_ON);
 			VkPresentModeKHR* ptr = details.presentModes.putVoid(presentModeCount);
+			___tracy_emit_zone_end(ctx4);
+			@static TracyLoc zone5 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx5 = ___tracy_emit_zone_begin(&zone5, TRACY_ON);
 			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, ptr);
+			___tracy_emit_zone_end(ctx5);
 		}
 
+		___tracy_emit_zone_end(ctx);
 		return details;
 	}
 

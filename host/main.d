@@ -1,14 +1,27 @@
 import std.string : toStringz;
 import std.stdio;
+import std.getopt;
 import std.traits : isFunction, isFunctionPointer, isType;
 import all;
 import deps.tracy;
 
-void main() {
+void main(string[] args) {
+	bool enable_tracy = false;
+
+	GetoptResult optResult = getopt(
+		args,
+		"tracy", "Enable tracy profiling", &enable_tracy,
+	);
+
+	auto startTime = currTime;
 	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
 
-	load_dll!(deps.tracy)("TracyProfiler.dll");
+	if (enable_tracy) {
+		load_dll!(deps.tracy)("TracyProfiler.dll");
+	} else {
+		stub_tracy();
+	}
 
 	auto startCompileTime = currTime;
 	Driver driver;
@@ -23,6 +36,7 @@ void main() {
 	//driver.context.printLirRA = true;
 	//driver.context.printCodeHex = true;
 	driver.context.printTraceOnError = true;
+	driver.context.useFramePointer = true;
 
 	driver.beginCompilation();
 	//driver.context.setDumpFilter("createInstance");
@@ -50,17 +64,20 @@ void main() {
 	___tracy_emit_zone_end(tracy_ctx);
 	//writefln("RO: %s", driver.context.roStaticDataBuffer.bufPtr);
 
-	auto duration = endCompileTime - startCompileTime;
-	times.onIteration(0, duration);
-	//times.print;
-
-	writefln("Compiled in %ss", scaledNumberFmt(duration));
-
-	stdout.flush;
-
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");
 
 	runFunc();
+
+	auto endTime = currTime;
+
+	auto duration = endCompileTime - startCompileTime;
+	times.onIteration(0, duration);
+	//times.print;
+	stdout.flush;
+	writefln("Tracy dll load %ss", scaledNumberFmt(startCompileTime - startTime));
+	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
+	writefln("Run %ss", scaledNumberFmt(endTime - endCompileTime));
+	writefln("Total %ss", scaledNumberFmt(endTime - startTime));
 }
 
 void regModules(ref Driver driver)
@@ -145,6 +162,37 @@ void load_dll(alias Module)(string dllFile) {
 		}
 	}
 }
+
+void stub_tracy() {
+	import deps.tracy;
+	___tracy_emit_zone_begin = &stub_tracy_emit_zone_begin;
+	___tracy_emit_zone_begin_callstack = &stub_tracy_emit_zone_begin_callstack;
+	___tracy_emit_zone_end = &stub_tracy_emit_zone_end;
+	___tracy_emit_frame_mark = &stub_tracy_emit_frame_mark;
+	___tracy_emit_frame_mark_start = &stub_tracy_emit_frame_mark_start;
+	___tracy_emit_frame_mark_end = &stub_tracy_emit_frame_mark_end;
+	___tracy_set_thread_name = &stub_tracy_set_thread_name;
+	___tracy_emit_plot = &stub_tracy_emit_plot;
+	___tracy_emit_message_appinfo = &stub_tracy_emit_message_appinfo;
+	___tracy_emit_message = &stub_tracy_emit_message;
+	___tracy_emit_messageL = &stub_tracy_emit_messageL;
+	___tracy_emit_messageC = &stub_tracy_emit_messageC;
+	___tracy_emit_messageLC = &stub_tracy_emit_messageLC;
+}
+
+extern(C) TracyCZoneCtx stub_tracy_emit_zone_begin(const TracyLoc* srcloc, int active) { return TracyCZoneCtx(); }
+extern(C) TracyCZoneCtx stub_tracy_emit_zone_begin_callstack(const TracyLoc* srcloc, int depth, int active) { return TracyCZoneCtx(); }
+extern(C) void stub_tracy_emit_zone_end(TracyCZoneCtx ctx) {}
+extern(C) void stub_tracy_emit_frame_mark(const char* name) {}
+extern(C) void stub_tracy_emit_frame_mark_start(const char* name) {}
+extern(C) void stub_tracy_emit_frame_mark_end(const char* name) {}
+extern(C) void stub_tracy_set_thread_name(const char* name) {}
+extern(C) void stub_tracy_emit_plot(const char* name, double val) {}
+extern(C) void stub_tracy_emit_message_appinfo(const char* txt, size_t size) {}
+extern(C) void stub_tracy_emit_message(const char* txt, size_t size, int callstack) {}
+extern(C) void stub_tracy_emit_messageL(const char* txt, int callstack) {}
+extern(C) void stub_tracy_emit_messageC(const char* txt, size_t size, uint color, int callstack) {}
+extern(C) void stub_tracy_emit_messageLC(const char* txt, uint color, int callstack) {}
 
 extern(C) void host_print(SliceString str) {
 	write(str.slice);

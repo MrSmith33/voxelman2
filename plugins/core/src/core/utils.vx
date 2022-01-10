@@ -5,6 +5,10 @@ import core.mimalloc;
 import core.lz4;
 import core.host;
 
+void __init_utils() {
+	QueryPerformanceFrequency(&_ticksPerSecond);
+}
+
 u8[] fromStringz(u8* cString) {
 	if (cString == null) return null;
 	u8* cursor = cString;
@@ -37,13 +41,37 @@ bool contains[T](T[] array, T needle) {
 	return false;
 }
 
-i64 curMsecs() {
+struct MonoTime {
+	i64 ticks;
+
+	Duration sub(MonoTime other) {
+		return Duration(ticks - other.ticks);
+	}
+
+	/*Duration opBinary[Operator op](MonoTime other) {
+		#assert(op == Operator.sub);
+		return Duration(ticks - other.ticks);
+	}*/
+}
+
+MonoTime currTime() {
 	i64 counter;
 	QueryPerformanceCounter(&counter);
-	i64 freq;
-	QueryPerformanceFrequency(&freq);
-	return counter * 1000 / freq;
+	return MonoTime(counter);
 }
+
+struct Duration
+{
+	i64 ticks;
+
+	f64 seconds() {
+		i64 freq;
+		QueryPerformanceFrequency(&freq);
+		return ticks / cast(f64)(_ticksPerSecond);
+	}
+}
+
+i64 _ticksPerSecond;
 
 T min[T](T a, T b) #inline {
 	if (a < b) return a;

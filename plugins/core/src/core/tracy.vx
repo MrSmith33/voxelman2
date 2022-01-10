@@ -22,3 +22,10 @@ void ___tracy_emit_zone_end(TracyZoneCtx ctx);
 void ___tracy_emit_frame_mark(u8* name = null);
 void ___tracy_emit_frame_mark_start(u8* name);
 void ___tracy_emit_frame_mark_end(u8* name);
+void ___tracy_set_thread_name(u8* name);
+void ___tracy_emit_plot(u8* name, f64 val);
+void ___tracy_emit_message_appinfo(u8* txt, u64 size);
+void ___tracy_emit_message(u8* txt, u64 size, i32 callstack = 0);
+void ___tracy_emit_messageL(u8* txt, i32 callstack = 0); // literal
+void ___tracy_emit_messageC(u8* txt, u64 size, u32 color, i32 callstack = 0); // colored
+void ___tracy_emit_messageLC(u8* txt, u32 color, i32 callstack = 0); // literal colored

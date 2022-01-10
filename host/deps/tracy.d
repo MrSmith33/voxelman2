@@ -23,3 +23,12 @@ void function(TracyCZoneCtx ctx) ___tracy_emit_zone_end;
 void function(const char* name) ___tracy_emit_frame_mark;
 void function(const char* name) ___tracy_emit_frame_mark_start;
 void function(const char* name) ___tracy_emit_frame_mark_end;
+
+void function(const char* name) ___tracy_set_thread_name;
+
+void function(const char* name, double val) ___tracy_emit_plot;
+void function(const char* txt, size_t size) ___tracy_emit_message_appinfo;
+void function(const char* txt, size_t size, int callstack) ___tracy_emit_message;
+void function(const char* txt, int callstack) ___tracy_emit_messageL;
+void function(const char* txt, size_t size, uint color, int callstack) ___tracy_emit_messageC;
+void function(const char* txt, uint color, int callstack) ___tracy_emit_messageLC;

@@ -83,13 +83,13 @@ struct VkFramebuffer_handle; alias VkFramebuffer = VkFramebuffer_handle*;
 struct VkCommandPool_handle; alias VkCommandPool = VkCommandPool_handle*;
 
 enum VK_ATTACHMENT_UNUSED = (~0);
-enum VK_FALSE = 0;
+enum u32 VK_FALSE = 0;
 enum VK_LOD_CLAMP_NONE = 1000.0;
 enum VK_QUEUE_FAMILY_IGNORED = (~0);
 enum VK_REMAINING_ARRAY_LAYERS = (~0);
 enum VK_REMAINING_MIP_LEVELS = (~0);
 enum VK_SUBPASS_EXTERNAL = (~0);
-enum VK_TRUE = 1;
+enum u32 VK_TRUE = 1;
 enum VK_WHOLE_SIZE = (~0);
 enum VK_MAX_MEMORY_TYPES = 32;
 enum VK_MAX_MEMORY_HEAPS = 16;
