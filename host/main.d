@@ -2,8 +2,10 @@ import std.string : toStringz;
 import std.stdio;
 import std.getopt;
 import std.traits : isFunction, isFunctionPointer, isType;
-import all;
+import vox.all;
 import deps.tracy;
+
+version = TRACY_DLL;
 
 void main(string[] args) {
 	bool enable_tracy = false;
@@ -17,10 +19,12 @@ void main(string[] args) {
 	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
 
-	if (enable_tracy) {
-		load_dll!(deps.tracy)("TracyProfiler.dll");
-	} else {
-		stub_tracy();
+	version(TRACY_DLL) {
+		if (enable_tracy) {
+			load_dll!(deps.tracy)("TracyProfiler.dll");
+		} else {
+			stub_tracy();
+		}
 	}
 
 	auto startCompileTime = currTime;
@@ -95,6 +99,7 @@ void regModules(ref Driver driver)
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/shaderc.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/tracy.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/utils.vx"));
+	driver.addModule(SourceFileInfo("../plugins/core/src/core/zstd.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/dispatch_device.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/functions.vx"));
 	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/types.vx"));
@@ -129,6 +134,7 @@ void registerHostSymbols(CompilationContext* context)
 	import deps.mimalloc;
 	import deps.shaderc;
 	import deps.tracy;
+	import deps.zstd;
 
 	regHostModule!(deps.enet)("enet");
 	regHostModule!(deps.glfw3)("glfw3");
@@ -138,6 +144,7 @@ void registerHostSymbols(CompilationContext* context)
 	regHostModule!(deps.mimalloc)("mimalloc");
 	regHostModule!(deps.shaderc)("shaderc");
 	regHostModule!(deps.tracy)("tracy");
+	regHostModule!(deps.zstd)("zstd");
 
 	Identifier modId = context.idMap.getOrRegNoDup(context, "host");
 	LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
@@ -163,6 +170,7 @@ void load_dll(alias Module)(string dllFile) {
 	}
 }
 
+version(TRACY_DLL)
 void stub_tracy() {
 	import deps.tracy;
 	___tracy_emit_zone_begin = &stub_tracy_emit_zone_begin;

@@ -13,6 +13,10 @@ WIP rewrite of voxelman
 
 Currently following [Vulkan tutorial](https://vulkan-tutorial.com)
 
+## Profiling
+
+Pass `--tracy` flag to the executable to enable tracy. Run the voxelman application as an administrator to get more profiling information. Start Tracy profiler and connect to the application. Tracy is disabled by default as it affects startup time.
+
 ## Links
 
 * [Voxelman v1](https://github.com/MrSmith33/voxelman)
@@ -63,3 +67,16 @@ Or build/download them yourself:
 * shaderc:
    * `shaderc_shared.dll` & `shaderc_shared.lib` from [VulkanSDK](https://www.lunarg.com/vulkan-sdk/) or from releases of https://github.com/google/shaderc
    * [https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe](https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe)`/Lib/shaderc_shared.lib` & `/Bin/shaderc_shared.dll`
+* zstd
+   * Download https://github.com/facebook/zstd/releases/download/v1.5.2/zstd-1.5.2.tar.gz
+   * Unpack into `zstd-1.5.2/`
+   * Go to `zstd-1.5.2/build/cmake`
+   * Execute
+     ```
+     mkdir build
+     cd build
+     cmake ..
+     ```
+   * Open `zstd-1.5.2/build/cmake/build/zstd.sln`
+   * Select Release build and build `libzstd_static` project
+   * Copy `zstd-1.5.2/build/cmake/build/lib/Release/zstd_static.lib`
