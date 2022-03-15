@@ -28,7 +28,7 @@ Pass `--tracy` flag to the executable to enable tracy. Run the voxelman applicat
 `.lib` files must be placed into `lib/` directory
 
 Download pre-built dependencies from:
-* https://github.com/MrSmith33/voxelman2/releases/download/deps/bin.7z
+* ~~https://github.com/MrSmith33/voxelman2/releases/download/deps/bin.7z~~ not needed
 * https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
 
 Or build/download them yourself:
@@ -59,14 +59,32 @@ Or build/download them yourself:
    * https://github.com/wolfpld/tracy/archive/refs/tags/v0.7.8.zip
    * Open `/library/win32/TracyProfiler.sln`
    * Use Release build
-   * Build as dll
+   * ~~Build as dll~~
    * `Whole program optimization`: `/GL` -> `No`
    * `Debug Information format`: `/Zi` -> `None`
-   * Copy `tracy/library/win32/x64/Release/TracyProfiler.dll`
-   * Linking with `TracyProfiler.lib` caused D host to not generate proper stack traces, which is important when debugging compiler and other stuff. Loading master version of tracy dll with LoadLibraryA is super slow (like 30-40s).
+   * ~~Copy `tracy/library/win32/x64/Release/TracyProfiler.dll`~~
+   * ~~Linking with `TracyProfiler.lib` caused D host to not generate proper stack traces, which is important when debugging compiler and other stuff. Loading master version of tracy dll with LoadLibraryA is super slow (like 30-40s).~~
+   * Define `TRACY_DELAYED_INIT` and `TRACY_MANUAL_LIFETIME` preprocessor definitions in `C/C++` -> `Preprocessor` -> `Preprocessor Definitions`
+   * Add this code to `TracyC.h` before `___tracy_init_thread` definition:
+     ```C
+     #if defined(TRACY_DELAYED_INIT) && defined(TRACY_MANUAL_LIFETIME)
+     TRACY_API void ___tracy_startup_profiler(void);
+     TRACY_API void ___tracy_shutdown_profiler(void);
+     #endif
+     ```
+   * Add this code to `client/TracyProfiler.cpp` after `___tracy_init_thread` declaration:
+     ```C
+     #if defined(TRACY_DELAYED_INIT) && defined(TRACY_MANUAL_LIFETIME)
+     TRACY_API void ___tracy_startup_profiler(void) { tracy::StartupProfiler(); }
+     TRACY_API void ___tracy_shutdown_profiler(void) { tracy::ShutdownProfiler(); }
+     #endif
+     ```
+   * Build as static lib
+   * Copy `tracy/library/win32/x64/Release/TracyProfiler.lib`
 * shaderc:
-   * `shaderc_shared.dll` & `shaderc_shared.lib` from [VulkanSDK](https://www.lunarg.com/vulkan-sdk/) or from releases of https://github.com/google/shaderc
-   * [https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe](https://sdk.lunarg.com/sdk/download/1.2.189.2/windows/VulkanSDK-1.2.189.2-Installer.exe)`/Lib/shaderc_shared.lib` & `/Bin/shaderc_shared.dll`
+   * Download from [VulkanSDK](https://vulkan.lunarg.com/sdk/home) or from releases of https://github.com/google/shaderc
+   * ~~Shared lib `/Lib/shaderc_shared.lib` & `/Bin/shaderc_shared.dll`~~
+   * Static lib `/Lib/shaderc_combined.lib`
 * zstd
    * Download https://github.com/facebook/zstd/releases/download/v1.5.2/zstd-1.5.2.tar.gz
    * Unpack into `zstd-1.5.2/`

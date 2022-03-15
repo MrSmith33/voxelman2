@@ -1,0 +1,12 @@
+*.cmd
+*.def
+*.dll
+*.exe
+*.lib
+*.lst
+*.obj
+*.pdb
+*.sublime-project
+*.sublime-workspace
+/bin
+/lib

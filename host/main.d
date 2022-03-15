@@ -3,11 +3,11 @@ import std.stdio;
 import std.getopt;
 import std.traits : isFunction, isFunctionPointer, isType;
 import vox.all;
-import deps.tracy;
 
-version = TRACY_DLL;
 
 void main(string[] args) {
+	static import deps.tracy_lib;
+	import deps.tracy_ptr;
 	bool enable_tracy = false;
 
 	GetoptResult optResult = getopt(
@@ -19,13 +19,12 @@ void main(string[] args) {
 	import deps.kernel32 : SetConsoleOutputCP;
 	SetConsoleOutputCP(65001);
 
-	version(TRACY_DLL) {
-		if (enable_tracy) {
-			load_dll!(deps.tracy)("TracyProfiler.dll");
-		} else {
-			stub_tracy();
-		}
-	}
+	load_tracy(enable_tracy);
+
+	tracy_startup_profiler();
+	scope(exit) tracy_shutdown_profiler();
+
+	tracy_set_thread_name("main");
 
 	auto startCompileTime = currTime;
 	Driver driver;
@@ -43,14 +42,17 @@ void main(string[] args) {
 	driver.context.useFramePointer = true;
 
 	driver.beginCompilation();
+
 	//driver.context.setDumpFilter("createInstance");
+
 	// add files
-	regModules(driver);
+	registerHostSymbols(&driver.context);
+	regPlugins(driver, ["core", "hello_triangle"]);
 
 	auto times = PerPassTimeMeasurements(1, driver.passes);
 
 	static loc = TracyLoc("Compile", "main.d", "main.d", 42, 0xFF00FF);
-	auto tracy_ctx = ___tracy_emit_zone_begin(&loc, 1);
+	auto tracy_ctx = tracy_emit_zone_begin(&loc, 1);
 	// compile
 	try {
 		driver.compile();
@@ -65,12 +67,8 @@ void main(string[] args) {
 	}
 	driver.markCodeAsExecutable();
 	auto endCompileTime = currTime;
-	___tracy_emit_zone_end(tracy_ctx);
+	tracy_emit_zone_end(tracy_ctx);
 	//writefln("RO: %s", driver.context.roStaticDataBuffer.bufPtr);
-
-	auto runFunc = driver.context.getFunctionPtr!(void)("main", "run");
-
-	runFunc();
 
 	auto endTime = currTime;
 
@@ -78,31 +76,71 @@ void main(string[] args) {
 	times.onIteration(0, duration);
 	//times.print;
 	stdout.flush;
-	writefln("Tracy dll load %ss", scaledNumberFmt(startCompileTime - startTime));
+	writefln("Tracy load %ss", scaledNumberFmt(startCompileTime - startTime));
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
-	writefln("Run %ss", scaledNumberFmt(endTime - endCompileTime));
 	writefln("Total %ss", scaledNumberFmt(endTime - startTime));
+
+	auto runFunc = driver.context.getFunctionPtr!(void)("main", "main");
+	runFunc();
 }
 
-void regModules(ref Driver driver)
+void regPlugins(ref Driver driver, string[] enabledPlugins)
 {
-	registerHostSymbols(&driver.context);
-	driver.addModule(SourceFileInfo("../plugins/hello_triangle/src/hello_triangle/main.vx"));
+	import std.file : exists, dirEntries, SpanMode, DirEntry;
+	import std.path : buildPath, pathSplitter, extension, baseName;
+	import std.range : back;
 
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/enet.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/glfw3.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/host.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/kernel32.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/lz4.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/mdbx.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/mimalloc.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/shaderc.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/tracy.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/utils.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/zstd.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/dispatch_device.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/functions.vx"));
-	driver.addModule(SourceFileInfo("../plugins/core/src/core/vulkan/types.vx"));
+	auto startTime = currTime;
+	string[] installedPlugins;
+
+	foreach (DirEntry entry; dirEntries("../plugins", SpanMode.shallow, false))
+	{
+		if (!entry.isDir) continue;
+
+		string pluginName = entry.name.pathSplitter.back;
+		installedPlugins ~= pluginName;
+	}
+
+	uint numSourceFilesLoaded = 0;
+	bool loadedMainFile = false;
+	string mainFile;
+	string mainFilePlugin;
+
+	foreach (string pluginName; installedPlugins)
+	{
+		string pluginDir = buildPath("../plugins", pluginName);
+		string pluginSrcDir = buildPath(pluginDir, "src");
+
+		if (!exists(pluginSrcDir)) continue; // no src/ found
+
+		foreach (DirEntry srcEntry; dirEntries(pluginSrcDir, SpanMode.depth, false))
+		{
+			if (!srcEntry.isFile) continue;
+			if (srcEntry.name.extension != ".vx") continue;
+			if (srcEntry.name.baseName == "main.vx")
+			{
+				if (loadedMainFile) {
+					stderr.writeln("Multiple main.vx files detected");
+					stderr.writeln("- ", mainFile, " from ", mainFilePlugin);
+					stderr.writeln("- ", srcEntry.name);
+					assert(false);
+				}
+
+				loadedMainFile = true;
+				mainFile = srcEntry.name;
+				mainFilePlugin = pluginName;
+			}
+			driver.addModule(SourceFileInfo(srcEntry.name));
+			++numSourceFilesLoaded;
+			//writeln("add ", srcEntry.name);
+		}
+	}
+
+	auto endTime = currTime;
+
+	stderr.writefln("Plugins scan time %ss", scaledNumberFmt(endTime - startTime));
+	stderr.writefln("Found %s plugins", installedPlugins.length);
+	stderr.writefln("Loaded %s source files", numSourceFilesLoaded);
 }
 
 void registerHostSymbols(CompilationContext* context)
@@ -133,7 +171,7 @@ void registerHostSymbols(CompilationContext* context)
 	import deps.mdbx;
 	import deps.mimalloc;
 	import deps.shaderc;
-	import deps.tracy;
+	import deps.tracy_ptr;
 	import deps.zstd;
 
 	regHostModule!(deps.enet)("enet");
@@ -143,13 +181,16 @@ void registerHostSymbols(CompilationContext* context)
 	regHostModule!(deps.mdbx)("mdbx");
 	regHostModule!(deps.mimalloc)("mimalloc");
 	regHostModule!(deps.shaderc)("shaderc");
-	regHostModule!(deps.tracy)("tracy");
+	regHostModule!(deps.tracy_ptr)("tracy");
 	regHostModule!(deps.zstd)("zstd");
 
-	Identifier modId = context.idMap.getOrRegNoDup(context, "host");
-	LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
-	Identifier symId = context.idMap.getOrRegNoDup(context, "host_print");
-	context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&host_print);
+	// host
+	{
+		Identifier modId = context.idMap.getOrRegNoDup(context, "host");
+		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
+		Identifier symId = context.idMap.getOrRegNoDup(context, "host_print");
+		context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&host_print);
+	}
 }
 
 void load_dll(alias Module)(string dllFile) {
@@ -170,37 +211,27 @@ void load_dll(alias Module)(string dllFile) {
 	}
 }
 
-version(TRACY_DLL)
-void stub_tracy() {
-	import deps.tracy;
-	___tracy_emit_zone_begin = &stub_tracy_emit_zone_begin;
-	___tracy_emit_zone_begin_callstack = &stub_tracy_emit_zone_begin_callstack;
-	___tracy_emit_zone_end = &stub_tracy_emit_zone_end;
-	___tracy_emit_frame_mark = &stub_tracy_emit_frame_mark;
-	___tracy_emit_frame_mark_start = &stub_tracy_emit_frame_mark_start;
-	___tracy_emit_frame_mark_end = &stub_tracy_emit_frame_mark_end;
-	___tracy_set_thread_name = &stub_tracy_set_thread_name;
-	___tracy_emit_plot = &stub_tracy_emit_plot;
-	___tracy_emit_message_appinfo = &stub_tracy_emit_message_appinfo;
-	___tracy_emit_message = &stub_tracy_emit_message;
-	___tracy_emit_messageL = &stub_tracy_emit_messageL;
-	___tracy_emit_messageC = &stub_tracy_emit_messageC;
-	___tracy_emit_messageLC = &stub_tracy_emit_messageLC;
-}
+void load_tracy(bool enable_tracy) {
+	import deps.tracy_ptr;
+	import deps.tracy_lib;
+	import deps.tracy_stub;
 
-extern(C) TracyCZoneCtx stub_tracy_emit_zone_begin(const TracyLoc* srcloc, int active) { return TracyCZoneCtx(); }
-extern(C) TracyCZoneCtx stub_tracy_emit_zone_begin_callstack(const TracyLoc* srcloc, int depth, int active) { return TracyCZoneCtx(); }
-extern(C) void stub_tracy_emit_zone_end(TracyCZoneCtx ctx) {}
-extern(C) void stub_tracy_emit_frame_mark(const char* name) {}
-extern(C) void stub_tracy_emit_frame_mark_start(const char* name) {}
-extern(C) void stub_tracy_emit_frame_mark_end(const char* name) {}
-extern(C) void stub_tracy_set_thread_name(const char* name) {}
-extern(C) void stub_tracy_emit_plot(const char* name, double val) {}
-extern(C) void stub_tracy_emit_message_appinfo(const char* txt, size_t size) {}
-extern(C) void stub_tracy_emit_message(const char* txt, size_t size, int callstack) {}
-extern(C) void stub_tracy_emit_messageL(const char* txt, int callstack) {}
-extern(C) void stub_tracy_emit_messageC(const char* txt, size_t size, uint color, int callstack) {}
-extern(C) void stub_tracy_emit_messageLC(const char* txt, uint color, int callstack) {}
+	tracy_startup_profiler          = enable_tracy ? &___tracy_startup_profiler          : &stub_tracy_startup_profiler;
+	tracy_shutdown_profiler         = enable_tracy ? &___tracy_shutdown_profiler         : &stub_tracy_shutdown_profiler;
+	tracy_emit_zone_begin           = enable_tracy ? &___tracy_emit_zone_begin           : &stub_tracy_emit_zone_begin;
+	tracy_emit_zone_begin_callstack = enable_tracy ? &___tracy_emit_zone_begin_callstack : &stub_tracy_emit_zone_begin_callstack;
+	tracy_emit_zone_end             = enable_tracy ? &___tracy_emit_zone_end             : &stub_tracy_emit_zone_end;
+	tracy_emit_frame_mark           = enable_tracy ? &___tracy_emit_frame_mark           : &stub_tracy_emit_frame_mark;
+	tracy_emit_frame_mark_start     = enable_tracy ? &___tracy_emit_frame_mark_start     : &stub_tracy_emit_frame_mark_start;
+	tracy_emit_frame_mark_end       = enable_tracy ? &___tracy_emit_frame_mark_end       : &stub_tracy_emit_frame_mark_end;
+	tracy_set_thread_name           = enable_tracy ? &___tracy_set_thread_name           : &stub_tracy_set_thread_name;
+	tracy_emit_plot                 = enable_tracy ? &___tracy_emit_plot                 : &stub_tracy_emit_plot;
+	tracy_emit_message_appinfo      = enable_tracy ? &___tracy_emit_message_appinfo      : &stub_tracy_emit_message_appinfo;
+	tracy_emit_message              = enable_tracy ? &___tracy_emit_message              : &stub_tracy_emit_message;
+	tracy_emit_messageL             = enable_tracy ? &___tracy_emit_messageL             : &stub_tracy_emit_messageL;
+	tracy_emit_messageC             = enable_tracy ? &___tracy_emit_messageC             : &stub_tracy_emit_messageC;
+	tracy_emit_messageLC            = enable_tracy ? &___tracy_emit_messageLC            : &stub_tracy_emit_messageLC;
+}
 
 extern(C) void host_print(SliceString str) {
 	write(str.slice);
