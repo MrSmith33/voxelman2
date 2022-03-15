@@ -13,6 +13,10 @@ env:
   LIBS: lib/liblz4_static.lib lib/glfw3.lib lib/enet64.lib lib/mdbx.lib lib/mimalloc-static.lib lib/shaderc_combined.lib lib/zstd_static.lib lib/TracyProfiler.lib ntdll.lib User32.lib Advapi32.lib ws2_32.lib winmm.lib gdi32.lib msvcrt.lib
   DEPS: -I=vox/source -I=host
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-ldc-debug:
     name: LDC debug
@@ -24,12 +28,12 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC1 }}
+      - name: Download lib.z7
+        run: curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+      - name: Unpack lib.z7
+        run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build ldc debug
-        shell: cmd
-        run: |
-          curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
-          7z x -ba -bso0 -bsp0 lib.7z
-          ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
 
   build-ldc-release:
     name: LDC release
@@ -41,12 +45,12 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC1 }}
+      - name: Download lib.z7
+        run: curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+      - name: Unpack lib.z7
+        run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build release
-        shell: cmd
-        run: |
-          curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
-          7z x -ba -bso0 -bsp0 lib.7z
-          ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
 
   build-dmd:
     name: DMD debug
@@ -63,6 +67,4 @@ jobs:
           curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
           7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build
-        shell: cmd
-        run: |
-          dmd -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: dmd -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
