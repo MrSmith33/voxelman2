@@ -33,7 +33,7 @@ jobs:
       - name: Unpack lib.z7
         run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build ldc debug
-        run: ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe $DEPS $LIBS $LINKFLAGS
 
   build-ldc-release:
     name: LDC release
@@ -50,7 +50,7 @@ jobs:
       - name: Unpack lib.z7
         run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build release
-        run: ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe $DEPS $LIBS $LINKFLAGS
 
   build-dmd:
     name: DMD debug
@@ -67,4 +67,4 @@ jobs:
           curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
           7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build
-        run: dmd -m64 -g -i host/main.d -of=bin/voxelman.exe %DEPS% %LIBS% %LINKFLAGS%
+        run: dmd -m64 -g -i host/main.d -of=bin/voxelman.exe $DEPS $LIBS $LINKFLAGS
