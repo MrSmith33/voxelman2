@@ -21,3 +21,6 @@ void CloseHandle();
 int  GetLastError(); // llvm complains if types do not match
 void LocalFree();
 void FormatMessageA();
+bool SetThreadPriority(void* hThread, int nPriority);
+void* GetCurrentThread();
+size_t SetThreadAffinityMask(void* hThread, size_t dwThreadAffinityMask);

@@ -10,6 +10,10 @@ void main(string[] args) {
 	import deps.tracy_ptr;
 	bool enable_tracy = false;
 
+	import deps.kernel32 : GetCurrentThread, SetThreadPriority, SetThreadAffinityMask;
+	SetThreadPriority(GetCurrentThread(), 2);
+	SetThreadAffinityMask(GetCurrentThread(), 1);
+
 	GetoptResult optResult = getopt(
 		args,
 		"tracy", "Enable tracy profiling", &enable_tracy,
@@ -47,7 +51,7 @@ void main(string[] args) {
 
 	// add files
 	registerHostSymbols(&driver.context);
-	regPlugins(driver, ["core", "hello_triangle"]);
+	registerPackages(driver, ["core", "hello_triangle"]);
 
 	auto times = PerPassTimeMeasurements(1, driver.passes);
 
@@ -84,7 +88,7 @@ void main(string[] args) {
 	runFunc();
 }
 
-void regPlugins(ref Driver driver, string[] enabledPlugins)
+void registerPackages(ref Driver driver, string[] enabledPlugins)
 {
 	import std.file : exists, dirEntries, SpanMode, DirEntry;
 	import std.path : buildPath, pathSplitter, extension, baseName;

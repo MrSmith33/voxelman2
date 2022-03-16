@@ -40,6 +40,14 @@ struct SwapChainSupportDetails {
 
 struct Client
 {
+	void run()
+	{
+		init();
+		mainLoop();
+		free();
+	}
+
+
 	GLFWwindow* window;
 	MDBX_env* mdbxEnv;
 
@@ -59,6 +67,9 @@ struct Client
 	VkExtent2D swapChainExtent;
 	VkImageView[] swapChainImageViews;
 	VkFramebuffer[] swapChainFramebuffers;
+
+	VkShaderModule vertShaderModule;
+	VkShaderModule fragShaderModule;
 
 	VkRenderPass renderPass;
 	VkPipelineLayout pipelineLayout;
@@ -86,12 +97,6 @@ struct Client
 
 	bool isRunning = true;
 
-	void run()
-	{
-		init();
-		mainLoop();
-		free();
-	}
 
 	void init()
 	{
@@ -123,116 +128,6 @@ struct Client
 		tracy_emit_zone_end(ctx3);
 
 		tracy_emit_zone_end(ctx);
-	}
-
-	void free()
-	{
-		@static TracyLoc zone = TracyLoc(null, "Client.free", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		mdbx_env_close_ex(mdbxEnv);
-		enet_deinitialize();
-		freeVulkan();
-		freeWindow();
-
-		tracy_emit_zone_end(ctx);
-	}
-
-	void freeVulkan()
-	{
-		@static TracyLoc zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		vkDeviceWaitIdle(device);
-
-		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-			vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
-			vkDestroySemaphore(device, imageAvailableSemaphores[i], null);
-			vkDestroyFence(device, inFlightFences[i], null);
-		}
-
-		vkDestroyCommandPool(device, commandPool, null);
-
-		cleanupSwapChain();
-		vkDestroyDevice(device, null);
-
-		if (enableValidationLayers) {
-			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
-		}
-
-		vkDestroySurfaceKHR(instance, surface, null);
-		vkDestroyInstance(instance, null);
-
-		tracy_emit_zone_end(ctx);
-	}
-
-	void recreateSwapChain() {
-		// Pause if window was minimized
-		i32 width;
-		i32 height;
-		glfwGetFramebufferSize(window, &width, &height);
-		while (width == 0 || height == 0) {
-			glfwGetFramebufferSize(window, &width, &height);
-			glfwWaitEvents();
-		}
-
-		vkDeviceWaitIdle(device);
-
-		cleanupSwapChain();
-
-		createSwapChain();
-		if (!isRunning) return;
-		createImageViews();
-		if (!isRunning) return;
-		createRenderPass();
-		if (!isRunning) return;
-		createGraphicsPipeline();
-		if (!isRunning) return;
-		createFramebuffers();
-	}
-
-	void cleanupSwapChain() {
-		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
-			vkDestroyFramebuffer(device, swapChainFramebuffers[i], null);
-		}
-
-		vkDestroyPipeline(device, graphicsPipeline, null);
-		vkDestroyPipelineLayout(device, pipelineLayout, null);
-		vkDestroyRenderPass(device, renderPass, null);
-
-		for (u64 i = 0; i < swapChainImageViews.length; ++i) {
-			vkDestroyImageView(device, swapChainImageViews[i], null);
-		}
-		swapChainImageViews = freeArray[VkImageView](swapChainImageViews);
-
-		vkDestroySwapchainKHR(device, swapChain, null);
-	}
-
-	void freeWindow()
-	{
-		@static TracyLoc zone = TracyLoc(null, "Client.freeWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		glfwDestroyWindow(window);
-		glfwTerminate();
-
-		tracy_emit_zone_end(ctx);
-	}
-
-	void mainLoop()
-	{
-		while(isRunning && !glfwWindowShouldClose(window)) {
-			update();
-			drawFrame();
-			tracy_emit_frame_mark();
-		}
-	}
-
-	void update()
-	{
-		@static TracyLoc zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
-		glfwPollEvents();
-		tracy_emit_zone_end(tracy_ctx1);
-		//@static TracyLoc zone_loc2 = TracyLoc(null, "sleep(1)", "main.vx", cast(u32)__LINE__, 0x00CC00); TracyZoneCtx tracy_ctx2 = tracy_emit_zone_begin(&zone_loc2, TRACY_ON);
-		//Sleep(1);
-		//tracy_emit_zone_end(tracy_ctx2);
 	}
 
 	void initWindow()
@@ -313,6 +208,8 @@ struct Client
 		if (!isRunning) return;
 		createRenderPass();
 		if (!isRunning) return;
+		loadShaders();
+		if (!isRunning) return;
 		createGraphicsPipeline();
 		if (!isRunning) return;
 		createFramebuffers();
@@ -322,6 +219,125 @@ struct Client
 		createCommandBuffers();
 		if (!isRunning) return;
 		createSyncObjects();
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	void mainLoop()
+	{
+		while(isRunning && !glfwWindowShouldClose(window)) {
+			update();
+			drawFrame();
+			tracy_emit_frame_mark();
+		}
+
+		vkDeviceWaitIdle(device);
+	}
+
+	void update()
+	{
+		@static TracyLoc zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
+		glfwPollEvents();
+		tracy_emit_zone_end(tracy_ctx1);
+		//@static TracyLoc zone_loc2 = TracyLoc(null, "sleep(1)", "main.vx", cast(u32)__LINE__, 0x00CC00); TracyZoneCtx tracy_ctx2 = tracy_emit_zone_begin(&zone_loc2, TRACY_ON);
+		//Sleep(1);
+		//tracy_emit_zone_end(tracy_ctx2);
+	}
+
+	void free()
+	{
+		@static TracyLoc zone = TracyLoc(null, "Client.free", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		mdbx_env_close_ex(mdbxEnv);
+		enet_deinitialize();
+		freeVulkan();
+		freeWindow();
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	void freeVulkan()
+	{
+		@static TracyLoc zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		vkDestroyShaderModule(device, vertShaderModule, null);
+		vkDestroyShaderModule(device, fragShaderModule, null);
+
+		cleanupSwapChain();
+
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
+			vkDestroySemaphore(device, imageAvailableSemaphores[i], null);
+			vkDestroyFence(device, inFlightFences[i], null);
+		}
+
+		vkDestroyCommandPool(device, commandPool, null);
+
+		vkDestroyDevice(device, null);
+
+		if (enableValidationLayers) {
+			vkDestroyDebugUtilsMessengerEXT(instance, debugMessenger, null);
+		}
+
+		vkDestroySurfaceKHR(instance, surface, null);
+		vkDestroyInstance(instance, null);
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	void freeWindow()
+	{
+		@static TracyLoc zone = TracyLoc(null, "Client.freeWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		glfwDestroyWindow(window);
+		glfwTerminate();
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	void cleanupSwapChain() {
+		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
+			vkDestroyFramebuffer(device, swapChainFramebuffers[i], null);
+		}
+
+		vkDestroyPipeline(device, graphicsPipeline, null);
+		vkDestroyPipelineLayout(device, pipelineLayout, null);
+		vkDestroyRenderPass(device, renderPass, null);
+
+		for (u64 i = 0; i < swapChainImageViews.length; ++i) {
+			vkDestroyImageView(device, swapChainImageViews[i], null);
+		}
+		//swapChainImageViews = freeArray[VkImageView](swapChainImageViews);
+
+		vkDestroySwapchainKHR(device, swapChain, null);
+	}
+
+	void recreateSwapChain() {
+		@static TracyLoc zone = TracyLoc(null, "Client.recreateSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+		// Pause if window was minimized
+		i32 width;
+		i32 height;
+		glfwGetFramebufferSize(window, &width, &height);
+		while (width == 0 || height == 0) {
+			glfwGetFramebufferSize(window, &width, &height);
+			glfwWaitEvents();
+		}
+
+		framebufferResized = false;
+
+		vkDeviceWaitIdle(device);
+
+		cleanupSwapChain();
+
+		createSwapChain();
+		if (!isRunning) return;
+		createImageViews();
+		if (!isRunning) return;
+		createRenderPass();
+		if (!isRunning) return;
+		createGraphicsPipeline();
+		if (!isRunning) return;
+		createFramebuffers();
 
 		tracy_emit_zone_end(ctx);
 	}
@@ -342,10 +358,10 @@ struct Client
 
 		Array[u8*] extensions = getRequiredExtensions;
 
-		println("Requesting ", extensions.length, " extensions:");
-		for (i32 i; i < extensions.length; ++i) {
-			println("  ", extensions.ptr[i].fromStringz);
-		}
+		//println("Requesting ", extensions.length, " extensions:");
+		//for (i32 i; i < extensions.length; ++i) {
+		//	println("  ", extensions.ptr[i].fromStringz);
+		//}
 
 		createInfo.enabledExtensionCount = extensions.length;
 		createInfo.ppEnabledExtensionNames = extensions.ptr;
@@ -383,17 +399,17 @@ struct Client
 		loadInstanceLevelFunctions(instance);
 		tracy_emit_zone_end(ctx2);
 
-		{
-			u32 extensionCount;
-			vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
-			println("\n", extensionCount, " instance extensions supported");
-			VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
-			vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
-			for (i32 i; i < extensionCount; ++i) {
-				println("  ", extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
-			}
-			freeArray[VkExtensionProperties](extensions);
-		}
+		//{
+		//	u32 extensionCount;
+		//	vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
+		//	println("\n", extensionCount, " instance extensions supported");
+		//	VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
+		//	vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
+		//	for (i32 i; i < extensionCount; ++i) {
+		//		println("  ", extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
+		//	}
+		//	freeArray[VkExtensionProperties](extensions);
+		//}
 
 		tracy_emit_zone_end(ctx);
 	}
@@ -402,7 +418,7 @@ struct Client
 		createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		//createInfo.messageSeverity |= VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
 		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		createInfo.pfnUserCallback = &debugCallback; // compiler bug
+		createInfo.pfnUserCallback = &debugCallback;
 		createInfo.pUserData = null; // Optional
 	}
 
@@ -800,11 +816,21 @@ struct Client
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentRef;
 
+		VkSubpassDependency dependency;
+		dependency.srcSubpass = cast(u32)VK_SUBPASS_EXTERNAL;
+		dependency.dstSubpass = 0;
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcAccessMask = 0;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
 		VkRenderPassCreateInfo renderPassInfo;
 		renderPassInfo.attachmentCount = 1;
 		renderPassInfo.pAttachments = &colorAttachment;
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
+		renderPassInfo.dependencyCount = 1;
+		renderPassInfo.pDependencies = &dependency;
 
 		if (vkCreateRenderPass(device, &renderPassInfo, null, &renderPass) != VK_SUCCESS) {
 			println("failed to create render pass!");
@@ -814,8 +840,8 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
-	void createGraphicsPipeline() {
-		@static TracyLoc zone = TracyLoc(null, "Client.createGraphicsPipeline", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+	void loadShaders() {
+		@static TracyLoc zone = TracyLoc(null, "Client.loadShaders", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		@static TracyLoc zone1 = TracyLoc("vertShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
 		u8[] vertShaderSource = readFile("../plugins/hello_triangle/res/shader.vert");
@@ -839,11 +865,17 @@ struct Client
 		shaderc_compiler_release(compiler);
 		tracy_emit_zone_end(ctx3);
 
-		VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-		VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+		vertShaderModule = createShaderModule(vertShaderCode);
+		fragShaderModule = createShaderModule(fragShaderCode);
 
 		freeArray[u8](vertShaderCode);
 		freeArray[u8](fragShaderCode);
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	void createGraphicsPipeline() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createGraphicsPipeline", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo;
 		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -946,9 +978,6 @@ struct Client
 			isRunning = false;
 		}
 		tracy_emit_zone_end(ctx5);
-
-		vkDestroyShaderModule(device, vertShaderModule, null);
-		vkDestroyShaderModule(device, fragShaderModule, null);
 
 		tracy_emit_zone_end(ctx);
 	}
@@ -1116,7 +1145,7 @@ struct Client
 		submitInfo.pWaitDstStageMask = &waitStage;
 
 		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+		submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
 		VkSemaphore signalSemaphore = renderFinishedSemaphores[currentFrame];
 		submitInfo.signalSemaphoreCount = 1;
@@ -1142,15 +1171,16 @@ struct Client
 
 		@static TracyLoc zone6 = TracyLoc(null, "vkQueuePresentKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx6 = tracy_emit_zone_begin(&zone6, TRACY_ON);
 		result = vkQueuePresentKHR(presentQueue, &presentInfo);
+		tracy_emit_zone_end(ctx6);
+
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-			framebufferResized = false;
+			//println("recreateSwapChain ", result == VK_ERROR_OUT_OF_DATE_KHR, " ", result == VK_SUBOPTIMAL_KHR, " ", framebufferResized);
 			recreateSwapChain();
 		} else if (result != VK_SUCCESS) {
 			println("failed to present swap chain image!");
 			isRunning = false;
 			return;
 		}
-		tracy_emit_zone_end(ctx6);
 
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
@@ -1305,6 +1335,7 @@ struct Client
 
 	void onFramebufferResize(i32 width, i32 height)
 	{
+		//println("Resized to ", width, " ", height);
 		framebufferResized = true;
 	}
 }

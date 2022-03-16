@@ -28,9 +28,9 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC1 }}
-      - name: Download lib.z7
+      - name: Download lib.7z
         run: curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
-      - name: Unpack lib.z7
+      - name: Unpack lib.7z
         run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build ldc debug
         run: ldc2 -m64 -g -i host/main.d -of=bin/voxelman.exe $DEPS $LIBS $LINKFLAGS
@@ -45,9 +45,9 @@ jobs:
       - uses: dlang-community/setup-dlang@v1
         with:
           compiler: ${{ env.DC1 }}
-      - name: Download lib.z7
+      - name: Download lib.7z
         run: curl -OLs https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
-      - name: Unpack lib.z7
+      - name: Unpack lib.7z
         run: 7z x -ba -bso0 -bsp0 lib.7z
       - name: Try build release
         run: ldc2 -m64 -O3 -release -boundscheck=off -enable-inlining -mcpu=native -flto=full -i -g host/main.d -of=bin/voxelman.exe $DEPS $LIBS $LINKFLAGS
