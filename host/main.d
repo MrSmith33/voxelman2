@@ -2,6 +2,7 @@ import std.string : toStringz;
 import std.stdio;
 import std.getopt;
 import std.traits : isFunction, isFunctionPointer, isType;
+import std.conv : text;
 import vox.all;
 
 
@@ -9,6 +10,7 @@ void main(string[] args) {
 	static import deps.tracy_lib;
 	import deps.tracy_ptr;
 	bool enable_tracy = false;
+	string entryPoint = "default";
 
 	import deps.kernel32 : GetCurrentThread, SetThreadPriority, SetThreadAffinityMask;
 	SetThreadPriority(GetCurrentThread(), 2);
@@ -17,6 +19,7 @@ void main(string[] args) {
 	GetoptResult optResult = getopt(
 		args,
 		"tracy", "Enable tracy profiling", &enable_tracy,
+		"entry", `Plugin to start ["default"]`, &entryPoint,
 	);
 
 	auto startTime = currTime;
@@ -51,11 +54,11 @@ void main(string[] args) {
 
 	// add files
 	registerHostSymbols(&driver.context);
-	registerPackages(driver, ["core", "hello_triangle"]);
+	registerPackages(driver, entryPoint);
 
 	auto times = PerPassTimeMeasurements(1, driver.passes);
 
-	static loc = TracyLoc("Compile", "main.d", "main.d", 42, 0xFF00FF);
+	static loc = TracyLoc("Compile Vox", __FILE__, __FILE__, __LINE__, 0xFF00FF);
 	auto tracy_ctx = tracy_emit_zone_begin(&loc, 1);
 	// compile
 	try {
@@ -79,71 +82,202 @@ void main(string[] args) {
 	auto duration = endCompileTime - startCompileTime;
 	times.onIteration(0, duration);
 	//times.print;
-	stdout.flush;
 	writefln("Tracy load %ss", scaledNumberFmt(startCompileTime - startTime));
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
 	writefln("Total %ss", scaledNumberFmt(endTime - startTime));
+	stdout.flush;
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "main");
 	runFunc();
 }
 
-void registerPackages(ref Driver driver, string[] enabledPlugins)
+struct RawPluginInfo
 {
-	import std.file : exists, dirEntries, SpanMode, DirEntry;
+	string name;
+	string[] dependencies; // plugin names found in plugin/deps.txt
+	string[] sourceFiles;  // .vx files inside      plugin/src/ dir
+	string[] resFiles;     // resource files inside plugin/res/ dir (currently .frag and .vert)
+	string mainFile;
+	bool isOnStack;
+	bool isSelected;
+}
+
+void registerPackages(ref Driver driver, string rootPluginName)
+{
+	import std.file : dirEntries, SpanMode, DirEntry;
 	import std.path : buildPath, pathSplitter, extension, baseName;
 	import std.range : back;
 
 	auto startTime = currTime;
-	string[] installedPlugins;
+	RawPluginInfo[] detectedPlugins;
+	uint[string] pluginMap;
+	bool foundRootPlugin;
+	uint rootPluginIndex;
 
-	foreach (DirEntry entry; dirEntries("../plugins", SpanMode.shallow, false))
+	static void onPluginDepsFile(ref RawPluginInfo info, string depsFilename)
 	{
-		if (!entry.isDir) continue;
-
-		string pluginName = entry.name.pathSplitter.back;
-		installedPlugins ~= pluginName;
+		import std.file : read;
+		import std.string : lineSplitter;
+		import std.algorithm : filter;
+		import std.range : empty;
+		import std.array : array;
+		string data = cast(string)read(depsFilename);
+		info.dependencies = cast(string[])data.lineSplitter.filter!(line => !line.empty).array;
 	}
 
-	uint numSourceFilesLoaded = 0;
-	bool loadedMainFile = false;
-	string mainFile;
-	string mainFilePlugin;
-
-	foreach (string pluginName; installedPlugins)
+	static void onPluginSrcDir(ref RawPluginInfo info, string srcDir)
 	{
-		string pluginDir = buildPath("../plugins", pluginName);
-		string pluginSrcDir = buildPath(pluginDir, "src");
-
-		if (!exists(pluginSrcDir)) continue; // no src/ found
-
-		foreach (DirEntry srcEntry; dirEntries(pluginSrcDir, SpanMode.depth, false))
+		//writefln("-d src");
+		bool foundMainFile = false;
+		foreach (DirEntry srcEntry; dirEntries(srcDir, SpanMode.depth, false))
 		{
 			if (!srcEntry.isFile) continue;
 			if (srcEntry.name.extension != ".vx") continue;
+
 			if (srcEntry.name.baseName == "main.vx")
 			{
-				if (loadedMainFile) {
-					stderr.writeln("Multiple main.vx files detected");
-					stderr.writeln("- ", mainFile, " from ", mainFilePlugin);
+				if (foundMainFile) {
+					stderr.writeln("Plugin %s has multiple main.vx files:", info.name);
 					stderr.writeln("- ", srcEntry.name);
+					stderr.writeln("- ", info.mainFile);
 					assert(false);
 				}
 
-				loadedMainFile = true;
-				mainFile = srcEntry.name;
-				mainFilePlugin = pluginName;
+				foundMainFile = true;
+				info.mainFile = srcEntry.name;
 			}
-			driver.addModule(SourceFileInfo(srcEntry.name));
+
+			//writeln("-s ", srcEntry.name);
+			info.sourceFiles ~= srcEntry.name;
+		}
+	}
+
+	void onPluginDir(string dir)
+	{
+		RawPluginInfo info;
+		info.name = dir.pathSplitter.back;
+
+		//writefln("Plugin: %s in %s", info.name, dir);
+		foreach (DirEntry entry; dirEntries(dir, SpanMode.shallow, false))
+		{
+			string base = entry.name.pathSplitter.back;
+			if (entry.isDir) {
+				switch(base) {
+					case "src":
+						onPluginSrcDir(info, entry.name);
+						break;
+					case "res":
+						//writefln("-d res");
+						break;
+					default: break;
+				}
+			} else if (entry.isFile) {
+				switch(base) {
+					case "deps.txt":
+						onPluginDepsFile(info, entry.name);
+						break;
+					default: break;
+				}
+			}
+		}
+
+		uint pluginIndex = cast(uint)detectedPlugins.length;
+
+		if (info.name in pluginMap) {
+			assert(false, text("Found multiple plugins named ", info.name));
+		}
+
+		pluginMap[info.name] = pluginIndex;
+
+		if (info.name == rootPluginName) {
+			foundRootPlugin = true;
+			rootPluginIndex = pluginIndex;
+		}
+
+		detectedPlugins ~= info;
+	}
+
+	// Gather available plugins
+	foreach (DirEntry entry; dirEntries("../plugins", SpanMode.shallow, false))
+	{
+		if (entry.isDir) onPluginDir(entry.name);
+	}
+
+	assert(foundRootPlugin, text("Cannot find root plugin ", rootPluginName));
+
+	uint[] stack;
+	uint[] selectedPlugins;
+
+	void walkDependencies(uint index) {
+		import std.algorithm : countUntil;
+
+		// Already loaded by some other plugin
+		if (detectedPlugins[index].isSelected) return;
+
+		stack ~= index;
+
+		if (detectedPlugins[index].isOnStack) {
+			stderr.writefln("Detected loop of plugin dependencies:");
+			ptrdiff_t from = countUntil(stack, index);
+			foreach(i; stack[from..$])
+			{
+				if (i == index) stderr.writeln("> ", detectedPlugins[i].name);
+				else stderr.writeln("- ", detectedPlugins[i].name);
+			}
+			assert(false);
+		}
+
+		selectedPlugins ~= index;
+		detectedPlugins[index].isOnStack = true;
+		detectedPlugins[index].isSelected = true;
+
+		foreach(string depName; detectedPlugins[index].dependencies)
+		{
+			if (auto depIndex = depName in pluginMap) {
+				walkDependencies(*depIndex);
+			} else {
+				assert(false, format("Cannot find dependency `%s` of `%s`", depName, detectedPlugins[index].name));
+			}
+		}
+
+		detectedPlugins[index].isOnStack = false;
+		stack.length--;
+	}
+
+	// Gather all dependencies and detect cyclic dependencies
+	walkDependencies(rootPluginIndex);
+
+	uint numSourceFilesLoaded = 0;
+	bool loadedMainFile = false;
+	size_t mainPlugin;
+
+	foreach (i; selectedPlugins)
+	{
+		RawPluginInfo* info = &detectedPlugins[i];
+
+		foreach (string file; info.sourceFiles) {
+			driver.addModule(SourceFileInfo(file));
 			++numSourceFilesLoaded;
-			//writeln("add ", srcEntry.name);
+		}
+
+		if (info.mainFile) {
+			if (loadedMainFile) {
+				stderr.writeln("Multiple plugins define main.vx file:");
+				stderr.writeln("- ", info.name, " ", info.mainFile);
+				stderr.writeln("- ", detectedPlugins[mainPlugin].name, " ", detectedPlugins[mainPlugin].mainFile);
+				assert(false);
+			}
+
+			loadedMainFile = true;
+			mainPlugin = i;
 		}
 	}
 
 	auto endTime = currTime;
-
+	stdout.flush;
 	stderr.writefln("Plugins scan time %ss", scaledNumberFmt(endTime - startTime));
-	stderr.writefln("Found %s plugins", installedPlugins.length);
+	stderr.writefln("Detected %s plugins in ../plugins", detectedPlugins.length);
+	stderr.writefln("Selected %s plugins starting from %s", selectedPlugins.length, rootPluginName);
 	stderr.writefln("Loaded %s source files", numSourceFilesLoaded);
 }
 

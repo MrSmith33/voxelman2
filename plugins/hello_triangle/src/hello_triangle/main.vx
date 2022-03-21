@@ -56,6 +56,7 @@ struct Client
 	VkSurfaceKHR surface;
 
 	VkPhysicalDevice physicalDevice;
+	SwapChainSupportDetails swapChainSupport; // result of querySwapChainSupport on physicalDevice
 	VkDevice device; // logical device
 
 	VkQueue graphicsQueue;
@@ -260,6 +261,8 @@ struct Client
 	{
 		@static TracyLoc zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
+		swapChainSupport.free();
+
 		vkDestroyShaderModule(device, vertShaderModule, null);
 		vkDestroyShaderModule(device, fragShaderModule, null);
 
@@ -381,7 +384,7 @@ struct Client
 			createInfo.enabledLayerCount = 0;
 		}
 
-		println("vkCreateInstance ", cast(void*)vkCreateInstance, " ", cast(void*)&createInfo, " ", cast(void*)&appInfo);
+		//println("vkCreateInstance ", cast(void*)vkCreateInstance, " ", cast(void*)&createInfo, " ", cast(void*)&appInfo);
 
 		@static TracyLoc zone1 = TracyLoc(null, "vkCreateInstance", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
 		i32 vkCreateInstanceResult = cast(i32)vkCreateInstance(&createInfo, null, &instance);
@@ -393,7 +396,7 @@ struct Client
 			tracy_emit_zone_end(ctx);
 			return;
 		}
-		println("VkInstance ", cast(void*)instance);
+		//println("VkInstance ", cast(void*)instance);
 
 		@static TracyLoc zone2 = TracyLoc(null, "loadInstanceLevelFunctions", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		loadInstanceLevelFunctions(instance);
@@ -463,7 +466,6 @@ struct Client
 
 		bool hasAllLayers = checkLayers(validationLayers, availableLayers);
 
-		println("has VK_LAYER_KHRONOS_validation: ", hasAllLayers);
 		freeArray[VkLayerProperties](availableLayers);
 
 		tracy_emit_zone_end(ctx);
@@ -505,10 +507,13 @@ struct Client
 
 		i64 bestDeviceScore = 0;
 		for (u32 i; i < deviceCount; ++i) {
-			i64 deviceScore = rateDeviceSuitability(devices[i]);
+			SwapChainSupportDetails deviceSwapChainDetails;
+			i64 deviceScore = rateDeviceSuitability(devices[i], &deviceSwapChainDetails);
 			if (deviceScore > bestDeviceScore) {
 				bestDeviceScore = deviceScore;
 				physicalDevice = devices[i];
+				swapChainSupport.free();
+				swapChainSupport = deviceSwapChainDetails;
 			}
 		}
 
@@ -527,7 +532,8 @@ struct Client
 	}
 
 	// negative score means that device is unsuitable
-	i64 rateDeviceSuitability(VkPhysicalDevice device) {
+	i64 rateDeviceSuitability(VkPhysicalDevice device, SwapChainSupportDetails* deviceSwapChainSupport) {
+		@static TracyLoc zone = TracyLoc(null, "Client.rateDeviceSuitability", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		VkPhysicalDeviceProperties deviceProperties;
 		vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
@@ -545,19 +551,28 @@ struct Client
 
 		QueueFamilyIndices indices = findQueueFamilies(device);
 
-		if (!indices.isComplete) return -1; // unsuitable
+		if (!indices.isComplete) {
+			tracy_emit_zone_end(ctx);
+			return -1; // unsuitable
+		}
 
 		bool extensionsSupported = checkDeviceExtensionSupport(device);
-		if (!extensionsSupported) return -1;
+		if (!extensionsSupported) {
+			tracy_emit_zone_end(ctx);
+			return -1; // unsuitable
+		}
 
 		bool swapChainAdequate = false;
 		if (extensionsSupported) {
-			SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-			swapChainAdequate = swapChainSupport.formats.length > 0 && swapChainSupport.presentModes.length > 0;
-			swapChainSupport.free();
+			querySwapChainSupport(device, deviceSwapChainSupport);
+			swapChainAdequate = deviceSwapChainSupport.formats.length > 0 && deviceSwapChainSupport.presentModes.length > 0;
 		}
-		if (!swapChainAdequate) return -1;
+		if (!swapChainAdequate) {
+			tracy_emit_zone_end(ctx);
+			return -1; // unsuitable
+		}
 
+		tracy_emit_zone_end(ctx);
 		return score;
 	}
 
@@ -700,8 +715,6 @@ struct Client
 
 	void createSwapChain() {
 		@static TracyLoc zone = TracyLoc(null, "Client.createSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -1290,12 +1303,11 @@ struct Client
 		}
 	}
 
-	SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) {
+	void querySwapChainSupport(VkPhysicalDevice device, SwapChainSupportDetails* result) {
 		@static TracyLoc zone = TracyLoc(null, "Client.querySwapChainSupport", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-		SwapChainSupportDetails details;
 
 		@static TracyLoc zone1 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceCapabilitiesKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &result.capabilities);
 		tracy_emit_zone_end(ctx1);
 
 		u32 formatCount;
@@ -1304,28 +1316,27 @@ struct Client
 		tracy_emit_zone_end(ctx2);
 
 		if (formatCount) {
-			VkSurfaceFormatKHR* ptr = details.formats.putVoid(formatCount);
+			VkSurfaceFormatKHR* ptr = result.formats.putVoid(formatCount);
 			@static TracyLoc zone3 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx3 = tracy_emit_zone_begin(&zone3, TRACY_ON);
 			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, ptr);
 			tracy_emit_zone_end(ctx3);
 		}
 
 		u32 presentModeCount;
-		@static TracyLoc zone4 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
+		@static TracyLoc zone4 = TracyLoc(null, "vkGetPhysicalDeviceSurfacePresentModesKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
 		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, null);
 		tracy_emit_zone_end(ctx4);
 
 		if (presentModeCount != 0) {
-			@static TracyLoc zone4 = TracyLoc(null, "details.presentModes.putVoid", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
-			VkPresentModeKHR* ptr = details.presentModes.putVoid(presentModeCount);
+			@static TracyLoc zone4 = TracyLoc(null, "result.presentModes.putVoid", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
+			VkPresentModeKHR* ptr = result.presentModes.putVoid(presentModeCount);
 			tracy_emit_zone_end(ctx4);
-			@static TracyLoc zone5 = TracyLoc(null, "vkGetPhysicalDeviceSurfaceFormatsKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx5 = tracy_emit_zone_begin(&zone5, TRACY_ON);
+			@static TracyLoc zone5 = TracyLoc(null, "vkGetPhysicalDeviceSurfacePresentModesKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx5 = tracy_emit_zone_begin(&zone5, TRACY_ON);
 			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, ptr);
 			tracy_emit_zone_end(ctx5);
 		}
 
 		tracy_emit_zone_end(ctx);
-		return details;
 	}
 
 	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
