@@ -11,6 +11,7 @@ import core.mdbx;
 import core.shaderc;
 import core.tracy;
 import core.utils;
+import core.vector;
 import core.vulkan.functions;
 import core.vulkan.types;
 
@@ -96,6 +97,10 @@ struct Client
 	u8*[1] validationLayers;
 	u8*[1] deviceExtensions;
 
+	Vertex[3] vertices;
+	VkBuffer vertexBuffer;
+	VkDeviceMemory vertexBufferMemory;
+
 	bool isRunning = true;
 
 
@@ -105,6 +110,10 @@ struct Client
 
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
+
+		vertices[0] = Vertex(vec2( 0.0, -0.5), vec3(1, 0, 0));
+		vertices[1] = Vertex(vec2( 0.5,  0.5), vec3(0, 1, 0));
+		vertices[2] = Vertex(vec2(-0.5,  0.5), vec3(0, 0, 1));
 
 		initWindow();
 		initVulkan();
@@ -217,6 +226,8 @@ struct Client
 		if (!isRunning) return;
 		createCommandPool();
 		if (!isRunning) return;
+		createVertexBuffer();
+		if (!isRunning) return;
 		createCommandBuffers();
 		if (!isRunning) return;
 		createSyncObjects();
@@ -267,6 +278,9 @@ struct Client
 		vkDestroyShaderModule(device, fragShaderModule, null);
 
 		cleanupSwapChain();
+
+		vkDestroyBuffer(device, vertexBuffer, null);
+		vkFreeMemory(device, vertexBufferMemory, null);
 
 		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
 			vkDestroySemaphore(device, renderFinishedSemaphores[i], null);
@@ -908,6 +922,14 @@ struct Client
 		vertexInputInfo.vertexBindingDescriptionCount = 0;
 		vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
+		VkVertexInputBindingDescription bindingDescription = Vertex.getBindingDescription();
+		VkVertexInputAttributeDescription[2] attributeDescriptions = Vertex.getAttributeDescriptions();
+
+		vertexInputInfo.vertexBindingDescriptionCount = 1;
+		vertexInputInfo.vertexAttributeDescriptionCount = cast(u32)attributeDescriptions.length;
+		vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
+		vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.ptr;
+
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly;
 		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		inputAssembly.primitiveRestartEnable = VK_FALSE;
@@ -1038,6 +1060,58 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
+	void createVertexBuffer() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createVertexBuffer", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		VkBufferCreateInfo bufferInfo;
+		bufferInfo.size = vertices.sizeof;
+		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(device, &bufferInfo, null, &vertexBuffer) != VK_SUCCESS) {
+			println("failed to create vertex buffer!");
+			isRunning = false;
+			return;
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(device, vertexBuffer, &memRequirements);
+
+		VkMemoryAllocateInfo allocInfo;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		if (vkAllocateMemory(device, &allocInfo, null, &vertexBufferMemory) != VK_SUCCESS) {
+			println("failed to allocate vertex buffer memory!");
+			isRunning = false;
+			return;
+		}
+
+		vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+
+		void* data;
+		vkMapMemory(device, vertexBufferMemory, 0, bufferInfo.size, 0, &data);
+			memcpy(data, vertices.ptr, vertices.sizeof);
+		vkUnmapMemory(device, vertexBufferMemory);
+
+		tracy_emit_zone_end(ctx);
+	}
+
+	u32 findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties) {
+		VkPhysicalDeviceMemoryProperties memProperties;
+		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+			if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+				return i;
+			}
+		}
+
+		println("failed to find suitable memory type!");
+		isRunning = false;
+		return 0;
+	}
+
 	void createCommandBuffers() {
 		@static TracyLoc zone = TracyLoc(null, "Client.createCommandBuffers", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -1086,7 +1160,10 @@ struct Client
 
 			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-			vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+			VkDeviceSize offset = 0;
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+
+			vkCmdDraw(commandBuffer, cast(u32)vertices.length, 1, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffer);
 
@@ -1422,4 +1499,35 @@ bool checkExtensions(u8*[] requestedExtensions, VkExtensionProperties[] availabl
 		}
 	}
 	return true;
+}
+
+struct Vertex
+{
+	vec2 pos;
+	vec3 color;
+
+	@static VkVertexInputBindingDescription getBindingDescription() {
+		VkVertexInputBindingDescription bindingDescription;
+		bindingDescription.binding = 0;
+		bindingDescription.stride = cast(u32)Vertex.sizeof;
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		return bindingDescription;
+	}
+
+	@static VkVertexInputAttributeDescription[2] getAttributeDescriptions() {
+		VkVertexInputAttributeDescription[2] attributeDescriptions;
+
+		attributeDescriptions[0].binding = 0;
+		attributeDescriptions[0].location = 0;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[0].offset = cast(u32)Vertex.pos.offsetof;
+
+		attributeDescriptions[1].binding = 0;
+		attributeDescriptions[1].location = 1;
+		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[1].offset = cast(u32)Vertex.color.offsetof;
+
+		return attributeDescriptions;
+	}
 }

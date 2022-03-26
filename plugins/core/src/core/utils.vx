@@ -210,6 +210,10 @@ else
 		if (len == 0) return;
 		RtlCopyMemory(cast(void*)dst.ptr, cast(void*)src.ptr, len);
 	}
+	void memcpy(void* dst, void* src, u64 length) {
+		if (length == 0) return;
+		RtlCopyMemory(dst, src, length);
+	}
 }
 
 struct Array[T]
