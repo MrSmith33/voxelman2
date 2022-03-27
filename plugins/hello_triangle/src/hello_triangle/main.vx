@@ -97,9 +97,12 @@ struct Client
 	u8*[1] validationLayers;
 	u8*[1] deviceExtensions;
 
-	Vertex[3] vertices;
+	Vertex[4] vertices;
+	u16[6] indicies;
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
+	VkBuffer indexBuffer;
+	VkDeviceMemory indexBufferMemory;
 
 	bool isRunning = true;
 
@@ -111,9 +114,16 @@ struct Client
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
 
-		vertices[0] = Vertex(vec2( 0.0, -0.5), vec3(1, 0, 0));
-		vertices[1] = Vertex(vec2( 0.5,  0.5), vec3(0, 1, 0));
-		vertices[2] = Vertex(vec2(-0.5,  0.5), vec3(0, 0, 1));
+		vertices[0] = Vertex(vec2(-0.5, -0.5), vec3(1, 0, 0));
+		vertices[1] = Vertex(vec2( 0.5, -0.5), vec3(0, 1, 0));
+		vertices[2] = Vertex(vec2( 0.5,  0.5), vec3(0, 0, 1));
+		vertices[3] = Vertex(vec2(-0.5,  0.5), vec3(1, 1, 1));
+		indicies[0] = 0;
+		indicies[1] = 1;
+		indicies[2] = 2;
+		indicies[3] = 2;
+		indicies[4] = 3;
+		indicies[5] = 0;
 
 		initWindow();
 		initVulkan();
@@ -228,6 +238,8 @@ struct Client
 		if (!isRunning) return;
 		createVertexBuffer();
 		if (!isRunning) return;
+		createIndexBuffer();
+		if (!isRunning) return;
 		createCommandBuffers();
 		if (!isRunning) return;
 		createSyncObjects();
@@ -278,6 +290,9 @@ struct Client
 		vkDestroyShaderModule(device, fragShaderModule, null);
 
 		cleanupSwapChain();
+
+		vkDestroyBuffer(device, indexBuffer, null);
+		vkFreeMemory(device, indexBufferMemory, null);
 
 		vkDestroyBuffer(device, vertexBuffer, null);
 		vkFreeMemory(device, vertexBufferMemory, null);
@@ -1085,6 +1100,27 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
+	void createIndexBuffer() {
+		VkDeviceSize bufferSize = indicies.sizeof;
+
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingBufferMemory;
+
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
+
+		void* data;
+		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+		memcpy(data, indicies.ptr, bufferSize);
+		vkUnmapMemory(device, stagingBufferMemory);
+
+		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
+
+		copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+		vkDestroyBuffer(device, stagingBuffer, null);
+		vkFreeMemory(device, stagingBufferMemory, null);
+	}
+
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
 		@static TracyLoc zone = TracyLoc(null, "Client.createBuffer", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -1215,7 +1251,9 @@ struct Client
 			VkDeviceSize offset = 0;
 			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
 
-			vkCmdDraw(commandBuffer, cast(u32)vertices.length, 1, 0, 0);
+			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+			vkCmdDrawIndexed(commandBuffer, cast(u32)indicies.length, 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffer);
 
