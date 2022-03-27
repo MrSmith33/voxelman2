@@ -361,6 +361,8 @@ struct Client
 
 		cleanupSwapChain();
 
+		querySwapChainSupport(physicalDevice, &swapChainSupport);
+
 		createSwapChain();
 		if (!isRunning) return;
 		createImageViews();
@@ -568,9 +570,6 @@ struct Client
 
 		println("  ", device, " ", deviceProperties.deviceName.ptr.fromStringz);
 
-		VkPhysicalDeviceFeatures deviceFeatures;
-		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
 		i64 score = 0;
 
 		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
@@ -591,11 +590,9 @@ struct Client
 			return -1; // unsuitable
 		}
 
-		bool swapChainAdequate = false;
-		if (extensionsSupported) {
-			querySwapChainSupport(device, deviceSwapChainSupport);
-			swapChainAdequate = deviceSwapChainSupport.formats.length > 0 && deviceSwapChainSupport.presentModes.length > 0;
-		}
+		querySwapChainSupport(device, deviceSwapChainSupport);
+		bool swapChainAdequate = deviceSwapChainSupport.formats.length > 0 && deviceSwapChainSupport.presentModes.length > 0;
+
 		if (!swapChainAdequate) {
 			tracy_emit_zone_end(ctx);
 			return -1; // unsuitable
@@ -634,15 +631,6 @@ struct Client
 
 		return indices;
 	}
-
-	//bool isDeviceSuitable(VkPhysicalDevice device) {
-	//	VkPhysicalDeviceProperties deviceProperties;
-	//	vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-	//	VkPhysicalDeviceFeatures deviceFeatures;
-	//	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-	//	return true;
-	//}
 
 	bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
 		u32 extensionCount;
