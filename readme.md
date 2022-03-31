@@ -22,6 +22,12 @@ Pass `--tracy` flag to the executable to enable tracy. Run the voxelman applicat
 * [Voxelman v1](https://github.com/MrSmith33/voxelman)
 * [Vox programming language](https://github.com/MrSmith33/vox)
 
+## Conventions
+
+* Right-handed coordinate system
+* 
+* Column vectors that are multiplied as `M * v`
+
 ## Getting deps
 
 `.dll` files must be placed into `bin/` directory\

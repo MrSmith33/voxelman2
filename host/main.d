@@ -82,9 +82,9 @@ void main(string[] args) {
 	auto duration = endCompileTime - startCompileTime;
 	times.onIteration(0, duration);
 	//times.print;
-	writefln("Tracy load %ss", scaledNumberFmt(startCompileTime - startTime));
+	//writefln("Tracy load %ss", scaledNumberFmt(startCompileTime - startTime));
 	writefln("Compiled in %ss", scaledNumberFmt(endCompileTime - startCompileTime));
-	writefln("Total %ss", scaledNumberFmt(endTime - startTime));
+	//writefln("Total %ss", scaledNumberFmt(endTime - startTime));
 	stdout.flush;
 
 	auto runFunc = driver.context.getFunctionPtr!(void)("main", "main");
@@ -275,14 +275,25 @@ void registerPackages(ref Driver driver, string rootPluginName)
 
 	auto endTime = currTime;
 	stdout.flush;
-	stderr.writefln("Plugins scan time %ss", scaledNumberFmt(endTime - startTime));
-	stderr.writefln("Detected %s plugins in ../plugins", detectedPlugins.length);
-	stderr.writefln("Selected %s plugins starting from %s", selectedPlugins.length, rootPluginName);
-	stderr.writefln("Loaded %s source files", numSourceFilesLoaded);
+	//stderr.writefln("Plugins scan time %ss", scaledNumberFmt(endTime - startTime));
+	//stderr.writefln("Detected %s plugins in ../plugins", detectedPlugins.length);
+	//stderr.writefln("Selected %s plugins starting from %s", selectedPlugins.length, rootPluginName);
+	//stderr.writefln("Loaded %s source files", numSourceFilesLoaded);
 }
 
 void registerHostSymbols(CompilationContext* context)
 {
+	void regHostSymbol(alias member)(string symName, Identifier modId, LinkIndex hostModuleIndex)
+	{
+		//writefln("reg %s %s", hostModuleName, symName);
+		Identifier symId = context.idMap.getOrRegNoDup(context, symName);
+		static if (isFunction!member) { // pickup functions
+			context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&member);
+		} else static if (isFunctionPointer!member && !isType!member) { // pickup function pointers
+			context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)member);
+		}
+	}
+
 	void regHostModule(alias Module)(string hostModuleName)
 	{
 		Identifier modId = context.idMap.getOrRegNoDup(context, hostModuleName);
@@ -291,14 +302,7 @@ void registerHostSymbols(CompilationContext* context)
 		foreach(m; __traits(allMembers, Module))
 		{
 			alias member = __traits(getMember, Module, m);
-			Identifier symId = context.idMap.getOrRegNoDup(context, m);
-			static if (isFunction!member) { // pickup functions
-				//writefln("reg %s %s", hostModuleName, m);
-				context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&member);
-			} else static if (isFunctionPointer!member && !isType!member) { // pickup function pointers
-				//writefln("reg %s %s", hostModuleName, m);
-				context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)member);
-			}
+			regHostSymbol!member(m, modId, hostModuleIndex);
 		}
 	}
 
@@ -326,8 +330,16 @@ void registerHostSymbols(CompilationContext* context)
 	{
 		Identifier modId = context.idMap.getOrRegNoDup(context, "host");
 		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
-		Identifier symId = context.idMap.getOrRegNoDup(context, "host_print");
-		context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&host_print);
+		regHostSymbol!host_print("host_print", modId, hostModuleIndex);
+		regHostSymbol!(sin!float)("sin_f32", modId, hostModuleIndex);
+		regHostSymbol!(sin!double)("sin_f64", modId, hostModuleIndex);
+		regHostSymbol!(cos!float)("cos_f32", modId, hostModuleIndex);
+		regHostSymbol!(cos!double)("cos_f64", modId, hostModuleIndex);
+		regHostSymbol!(sqrt!float)("sqrt_f32", modId, hostModuleIndex);
+		regHostSymbol!(sqrt!double)("sqrt_f64", modId, hostModuleIndex);
+		regHostSymbol!__debugbreak("__debugbreak", modId, hostModuleIndex);
+		regHostSymbol!(format_val!float)("format_f32", modId, hostModuleIndex);
+		regHostSymbol!(format_val!double)("format_f64", modId, hostModuleIndex);
 	}
 }
 
@@ -373,4 +385,19 @@ void load_tracy(bool enable_tracy) {
 
 extern(C) void host_print(SliceString str) {
 	write(str.slice);
+}
+static import core.math;
+extern(C) T sin(T)(T x) @safe pure nothrow @nogc { return core.math.sin(x); }
+extern(C) T cos(T)(T x) @safe pure nothrow @nogc { return core.math.cos(x); }
+extern(C) T sqrt(T)(T x) @safe pure nothrow @nogc { return core.math.sqrt(x); }
+extern(C) void __debugbreak() {
+	asm { int 3; }
+}
+
+extern(C) SliceString format_val(T)(char[64]* buf, T val) {
+	import std.format;
+	auto spec = singleSpec("%s");
+	char[] bufSlice = (*buf)[];
+	formatValue(bufSlice, val, spec);
+	return SliceString((*buf)[0..64-bufSlice.length]);
 }

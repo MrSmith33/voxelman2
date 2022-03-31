@@ -1,0 +1,16 @@
+module core.math;
+
+enum f64 PI = 3.14159265358979323846;
+
+f32 tan_f32(f32 v) { return sin_f32(v) / cos_f32(v); }
+f64 tan_f64(f64 v) { return sin_f64(v) / cos_f64(v); }
+f32 cot_f32(f32 v) { return cos_f32(v) / sin_f32(v); }
+f64 cot_f64(f64 v) { return cos_f64(v) / sin_f64(v); }
+
+@extern(module, "host"):
+f32 sin_f32(f32);
+f64 sin_f64(f64);
+f32 cos_f32(f32);
+f64 cos_f64(f64);
+f32 sqrt_f32(f32);
+f64 sqrt_f64(f64);

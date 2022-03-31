@@ -1,5 +1,248 @@
 module core.vector;
 
+import core.math;
+import core.utils;
+
 struct vec2 { f32 x; f32 y; }
 struct vec3 { f32 x; f32 y; f32 z; }
+struct vec3x { f32 x; f32 y; f32 z; f32 pad; }
 struct vec4 { f32 x; f32 y; f32 z; f32 w; }
+
+alias mat4 = f32[16];
+
+f32 degtorad(f32 deg) {
+	return deg / 180 * cast(f32)PI;
+}
+
+vec3 cross_vec3(vec3 a, vec3 b) {
+	return vec3 (
+		(a.y * b.z) - (a.z * b.y),
+		(a.z * b.x) - (a.x * b.z),
+		(a.x * b.y) - (a.y * b.x),
+	);
+}
+
+vec3 sub_vec3(vec3 a, vec3 b) {
+	return vec3
+	(
+		a.x - b.x,
+		a.y - b.y,
+		a.z - b.z,
+	);
+}
+
+f32 dot_vec3(vec3 a, vec3 b) {
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+f32 length_sqr_vec3(vec3 v) {
+	return v.x * v.x + v.y * v.y + v.z * v.z;
+}
+
+f32 length_vec3(vec3 v) {
+	return sqrt_f32(v.x * v.x + v.y * v.y + v.z * v.z);
+}
+
+vec3 depth_div(vec4 v) {
+	return vec3(v.x / v.w, v.y / v.w, v.z / v.w);
+}
+
+vec4 mult_mat4_vec4(mat4 m, vec4 v) {
+	return vec4(
+		m[0] * v.x + m[1] * v.y + m[2] * v.z + m[3] * v.w,
+		m[4] * v.x + m[5] * v.y + m[6] * v.z + m[7] * v.w,
+		m[8] * v.x + m[9] * v.y + m[10] * v.z + m[11] * v.w,
+		m[12] * v.x + m[13] * v.y + m[14] * v.z + m[15] * v.w,
+	);
+}
+
+vec3 normalized_vec3(vec3 v) {
+	f32 length_sqr = length_sqr_vec3(v);
+	//if (length_sqr > 0.0) // until float comparison with a constant is implemented in the compiler
+	//{
+		f32 coef = 1 / sqrt_f32(length_sqr);
+		return vec3(v.x * coef, v.y * coef, v.z * coef);
+	//}
+	//else
+	//{
+	//	return v;
+	//}
+}
+
+mat4 identityMatrix()
+{
+	mat4 res;
+
+	res[ 0] = 1.0;
+	res[ 1] = 0.0;
+	res[ 2] = 0.0;
+	res[ 3] = 0.0;
+
+	res[ 4] = 0.0;
+	res[ 5] = 1.0;
+	res[ 6] = 0.0;
+	res[ 7] = 0.0;
+
+	res[ 8] = 0.0;
+	res[ 9] = 0.0;
+	res[10] = 1.0;
+	res[11] = 0.0;
+
+	res[12] = 0.0;
+	res[13] = 0.0;
+	res[14] = 0.0;
+	res[15] = 1.0;
+
+	return res;
+}
+
+void print_mat4(mat4 m) {
+	println("(", m[ 0], " ", m[ 1], " ", m[ 2], " ", m[ 3]);
+	println(" ", m[ 4], " ", m[ 5], " ", m[ 6], " ", m[ 7]);
+	println(" ", m[ 8], " ", m[ 9], " ", m[10], " ", m[11]);
+	println(" ", m[12], " ", m[13], " ", m[14], " ", m[15], ")");
+}
+
+void print_vec3(vec3 v) {
+	println("(", v.x, " ", v.y, " ", v.z, ")");
+}
+
+void print_vec4(vec4 v) {
+	println("(", v.x, " ", v.y, " ", v.z, " ", v.w, ")");
+}
+
+// up is the direction of cameras +Y axis
+mat4 lookAtMatrix(vec3 camera_pos, vec3 target, vec3 up)
+{
+	mat4 res;
+
+	// this is for right-handed system
+	// matrix is filled by rows
+	// we calculate each camera space axis as a vector in the world space
+	// for example if camera looks up (-Y in world space) then camera space forward vector (+Z) must be (0 -1 0) in world space
+	// then matrix will perform dot product of input vertex with forward vector, giving us positive value if it is in front of the camera
+	// this scalar is the value of the Z camera space coordinates. Same with the rest of components.
+	vec3 z_axis = sub_vec3(target, camera_pos).normalized_vec3;
+	vec3 x_axis = cross_vec3(up.normalized_vec3, z_axis).normalized_vec3;
+	vec3 y_axis = cross_vec3(z_axis, x_axis);
+
+	res[ 0] = x_axis.x;
+	res[ 1] = x_axis.y;
+	res[ 2] = x_axis.z;
+	res[ 3] = -dot_vec3(x_axis, camera_pos);
+
+	res[ 4] = y_axis.x;
+	res[ 5] = y_axis.y;
+	res[ 6] = y_axis.z;
+	res[ 7] = -dot_vec3(y_axis, camera_pos);
+
+	res[ 8] = z_axis.x;
+	res[ 9] = z_axis.y;
+	res[10] = z_axis.z;
+	res[11] = -dot_vec3(z_axis, camera_pos);
+
+	res[12] = 0;
+	res[13] = 0;
+	res[14] = 0;
+	res[15] = 1;
+
+	//vec3 offset = vec3(-dot_vec3(x_axis, camera_pos), -dot_vec3(y_axis, camera_pos), -dot_vec3(z_axis, camera_pos));
+	//print_vec3(x_axis);
+	//print_vec3(y_axis);
+	//print_vec3(z_axis);
+	//println;
+	//print_vec3(camera_pos);
+	//print_vec3(offset);
+
+	return res;
+}
+
+/// inv_aspect = height / width
+mat4 perspectiveMatrix(f32 fov_y, f32 inv_aspect, f32 near, f32 far)
+{
+	mat4 res;
+
+	f32 cot_half_fov_y = cot_f32(0.5_f32 * fov_y);
+	f32 inv_far_near = 1 / (far - near);
+
+	res[ 0] =  inv_aspect * cot_half_fov_y;
+	res[ 1] =  0;
+	res[ 2] =  0;
+	res[ 3] =  0;
+
+	res[ 4] =  0;
+	res[ 5] =  cot_half_fov_y;
+	res[ 6] =  0;
+	res[ 7] =  0;
+
+	res[ 8] =  0;
+	res[ 9] =  0;
+
+	// Infinite Far, inverse Z (best)
+	res[10] =  0;
+	res[11] =  near;
+
+	// Infinite Far, non-inverse Z
+	//res[10] =  1;
+	//res[11] =  -near;
+
+	// Finite Far, non-inverse Z
+	//res[10] =  far * inv_far_near;
+	//res[11] =  -near * far * inv_far_near;
+
+	// Finite Far, inverse Z
+	// res[10] =  -near * inv_far_near;
+	// res[11] =  (near * far) * inv_far_near;
+
+	res[12] =  0;
+	res[13] =  0;
+	res[14] =  1;
+	res[15] =  0;
+
+	return res;
+}
+
+mat4 rotationMatrixX(f32 angle)
+{
+	mat4 res;
+
+	f32 s = sin_f32(angle);
+	f32 c = cos_f32(angle);
+
+	res[ 0] = 1; res[ 1] = 0; res[ 2] = 0; res[ 3] = 0;
+	res[ 4] = 0; res[ 5] = c; res[ 6] =-s; res[ 7] = 0;
+	res[ 8] = 0; res[ 9] = s; res[10] = c; res[11] = 0;
+	res[12] = 0; res[13] = 0; res[14] = 0; res[15] = 1;
+
+	return res;
+}
+
+mat4 rotationMatrixY(f32 angle)
+{
+	mat4 res;
+
+	f32 s = sin_f32(angle);
+	f32 c = cos_f32(angle);
+
+	res[ 0] = c; res[ 1] = 0; res[ 2] = s; res[ 3] = 0;
+	res[ 4] = 0; res[ 5] = 1; res[ 6] = 0; res[ 7] = 0;
+	res[ 8] =-s; res[ 9] = 0; res[10] = c; res[11] = 0;
+	res[12] = 0; res[13] = 0; res[14] = 0; res[15] = 1;
+
+	return res;
+}
+
+mat4 rotationMatrixZ(f32 angle)
+{
+	mat4 res;
+
+	f32 s = sin_f32(angle);
+	f32 c = cos_f32(angle);
+
+	res[ 0] = c; res[ 1] =-s; res[ 2] = 0; res[ 3] = 0;
+	res[ 4] = s; res[ 5] = c; res[ 6] = 0; res[ 7] = 0;
+	res[ 8] = 0; res[ 9] = 0; res[10] = 1; res[11] = 0;
+	res[12] = 0; res[13] = 0; res[14] = 0; res[15] = 1;
+
+	return res;
+}

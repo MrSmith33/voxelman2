@@ -60,6 +60,10 @@ MonoTime currTime() {
 	return MonoTime(counter);
 }
 
+Duration subTime(MonoTime a, MonoTime b) {
+	return Duration(a.ticks - b.ticks);
+}
+
 struct Duration
 {
 	i64 ticks;
@@ -321,12 +325,11 @@ $alias selectPrintFunc($type T) {
 		if (T == u64) return printUint;
 		return printInt;
 	}
-	if ($isSlice(T))
-		return printString;
-	if ($isPointer(T))
-		return printPtr;
-	if (T == bool)
-		return printBool;
+	if (T == f32) return print_f32;
+	if (T == f64) return print_f64;
+	if ($isSlice(T)) return printString;
+	if ($isPointer(T)) return printPtr;
+	if (T == bool) return printBool;
 	$compileError("selectPrintFunc: Invalid type");
 }
 
@@ -377,6 +380,23 @@ void printUint(u64 i, u32 minSize = 1, u8 base = 10)
 	u8[] res = formatUint(i, &buf, 1, base);
 	print(res);
 }
+
+void print_f32(f32 val)
+{
+	u8[64] buf;
+	u8[] res = format_f32(&buf, val);
+	print(res);
+}
+
+void print_f64(f64 val)
+{
+	u8[64] buf;
+	u8[] res = format_f64(&buf, val);
+	print(res);
+}
+
+@extern(module, "host") u8[] format_f32(u8[64]* buf, f32 f);
+@extern(module, "host") u8[] format_f64(u8[64]* buf, f64 f);
 
 void printPtr(void* ptr) #inline
 {

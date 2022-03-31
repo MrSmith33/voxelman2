@@ -7,6 +7,7 @@ import core.enet;
 import core.glfw3;
 import core.host;
 import core.kernel32;
+import core.math;
 import core.mdbx;
 import core.shaderc;
 import core.tracy;
@@ -25,8 +26,6 @@ void main()
 }
 
 enum TRACY_ON = 1;
-
-u8[] frame_name = "Frame";
 
 struct SwapChainSupportDetails {
 	VkSurfaceCapabilitiesKHR  capabilities;
@@ -74,6 +73,7 @@ struct Client
 	VkShaderModule fragShaderModule;
 
 	VkRenderPass renderPass;
+	VkDescriptorSetLayout descriptorSetLayout;
 	VkPipelineLayout pipelineLayout;
 	VkPipeline graphicsPipeline;
 
@@ -99,10 +99,17 @@ struct Client
 
 	Vertex[4] vertices;
 	u16[6] indicies;
+
 	VkBuffer vertexBuffer;
 	VkDeviceMemory vertexBufferMemory;
 	VkBuffer indexBuffer;
 	VkDeviceMemory indexBufferMemory;
+
+	VkBuffer[] uniformBuffers;
+	VkDeviceMemory[] uniformBuffersMemory;
+
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSet[] descriptorSets;
 
 	bool isRunning = true;
 
@@ -114,10 +121,10 @@ struct Client
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
 
-		vertices[0] = Vertex(vec2(-0.5, -0.5), vec3(1, 0, 0));
-		vertices[1] = Vertex(vec2( 0.5, -0.5), vec3(0, 1, 0));
-		vertices[2] = Vertex(vec2( 0.5,  0.5), vec3(0, 0, 1));
-		vertices[3] = Vertex(vec2(-0.5,  0.5), vec3(1, 1, 1));
+		vertices[0] = Vertex(vec3(-0.5, -0.5, 0), vec3(1, 0, 0));
+		vertices[1] = Vertex(vec3( 0.5, -0.5, 0), vec3(0, 1, 0));
+		vertices[2] = Vertex(vec3( 0.5,  0.5, 0), vec3(0, 0, 1));
+		vertices[3] = Vertex(vec3(-0.5,  0.5, 0), vec3(1, 1, 1));
 		indicies[0] = 0;
 		indicies[1] = 1;
 		indicies[2] = 2;
@@ -170,7 +177,7 @@ struct Client
 		tracy_emit_zone_end(ctx_glfwWindowHint);
 
 		@static TracyLoc zone4 = TracyLoc(null, "glfwCreateWindow", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwCreateWindow = tracy_emit_zone_begin(&zone4, TRACY_ON);
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Hello Triangle", null, null);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Tutorial - Uniform buffers", null, null);
 		tracy_emit_zone_end(ctx_glfwCreateWindow);
 
 		@static TracyLoc zone5 = TracyLoc(null, "glfwSetWindowUserPointer", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_glfwSetWindowUserPointer = tracy_emit_zone_begin(&zone5, TRACY_ON);
@@ -230,6 +237,8 @@ struct Client
 		if (!isRunning) return;
 		loadShaders();
 		if (!isRunning) return;
+		createDescriptorSetLayout();
+		if (!isRunning) return;
 		createGraphicsPipeline();
 		if (!isRunning) return;
 		createFramebuffers();
@@ -239,6 +248,12 @@ struct Client
 		createVertexBuffer();
 		if (!isRunning) return;
 		createIndexBuffer();
+		if (!isRunning) return;
+		createUniformBuffers();
+		if (!isRunning) return;
+		createDescriptorPool();
+		if (!isRunning) return;
+		createDescriptorSets();
 		if (!isRunning) return;
 		createCommandBuffers();
 		if (!isRunning) return;
@@ -250,8 +265,9 @@ struct Client
 	void mainLoop()
 	{
 		while(isRunning && !glfwWindowShouldClose(window)) {
+			f64 time = glfwGetTime();
 			update();
-			drawFrame();
+			drawFrame(cast(f32)time);
 			tracy_emit_frame_mark();
 		}
 
@@ -291,6 +307,8 @@ struct Client
 
 		cleanupSwapChain();
 
+		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, null);
+
 		vkDestroyBuffer(device, indexBuffer, null);
 		vkFreeMemory(device, indexBufferMemory, null);
 
@@ -328,6 +346,13 @@ struct Client
 	}
 
 	void cleanupSwapChain() {
+		// doesnt match the code
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			vkDestroyBuffer(device, uniformBuffers[i], null);
+			vkFreeMemory(device, uniformBuffersMemory[i], null);
+		}
+		vkDestroyDescriptorPool(device, descriptorPool, null);
+
 		for (u64 i = 0; i < swapChainFramebuffers.length; ++i) {
 			vkDestroyFramebuffer(device, swapChainFramebuffers[i], null);
 		}
@@ -372,6 +397,14 @@ struct Client
 		createGraphicsPipeline();
 		if (!isRunning) return;
 		createFramebuffers();
+		if (!isRunning) return;
+		createUniformBuffers();
+		if (!isRunning) return;
+		createDescriptorPool();
+		if (!isRunning) return;
+		createDescriptorSets();
+		if (!isRunning) return;
+		createCommandBuffers();
 
 		tracy_emit_zone_end(ctx);
 	}
@@ -493,7 +526,7 @@ struct Client
 		vkEnumerateInstanceLayerProperties(&layerCount, null);
 		VkLayerProperties[] availableLayers = makeArray[VkLayerProperties](layerCount);
 		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.ptr);
-		println("\n", layerCount, " layers supported");
+		//println("\n", layerCount, " layers supported");
 
 		bool hasAllLayers = checkLayers(validationLayers, availableLayers);
 
@@ -534,7 +567,7 @@ struct Client
 		VkPhysicalDevice[] devices = makeArray[VkPhysicalDevice](deviceCount);
 		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.ptr);
 
-		println("Found ", deviceCount, " devices:");
+		//println("Found ", deviceCount, " devices:");
 
 		i64 bestDeviceScore = 0;
 		for (u32 i; i < deviceCount; ++i) {
@@ -557,7 +590,7 @@ struct Client
 			return;
 		}
 
-		println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
+		//println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
 
 		tracy_emit_zone_end(ctx);
 	}
@@ -568,13 +601,13 @@ struct Client
 		VkPhysicalDeviceProperties deviceProperties;
 		vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
-		println("  ", device, " ", deviceProperties.deviceName.ptr.fromStringz);
+		//println("  ", device, " ", deviceProperties.deviceName.ptr.fromStringz);
 
 		i64 score = 0;
 
 		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 			score += 1000;
-			println("    discrete GPU");
+			//println("    discrete GPU");
 		}
 
 		QueueFamilyIndices indices = findQueueFamilies(device);
@@ -656,9 +689,9 @@ struct Client
 		@static TracyLoc zone = TracyLoc(null, "Client.createLogicalDevice", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-		println("Queues");
-		println("  Graphics: ", indices.indices[QueueFamily.graphics]);
-		println("   Present: ", indices.indices[QueueFamily.present]);
+		//println("Queues");
+		//println("  Graphics: ", indices.indices[QueueFamily.graphics]);
+		//println("   Present: ", indices.indices[QueueFamily.present]);
 
 
 		// Specify queues to be created in logical device
@@ -713,7 +746,7 @@ struct Client
 			tracy_emit_zone_end(ctx);
 			return;
 		}
-		println("Logical device ", device);
+		//println("Logical device ", device);
 
 
 		// Load functions of this specific device. Only support single device for now
@@ -870,6 +903,28 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
+	void createDescriptorSetLayout() {
+		@static TracyLoc zone = TracyLoc(null, "Client.createDescriptorSetLayout", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		VkDescriptorSetLayoutBinding uboLayoutBinding;
+		uboLayoutBinding.binding = 0;
+		uboLayoutBinding.descriptorCount = 1;
+		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uboLayoutBinding.pImmutableSamplers = null;
+		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo;
+		layoutInfo.bindingCount = 1;
+		layoutInfo.pBindings = &uboLayoutBinding;
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, null, &descriptorSetLayout) != VK_SUCCESS) {
+			println("failed to create descriptor set layout!");
+			isRunning = false;
+		}
+
+		tracy_emit_zone_end(ctx);
+	}
+
 	void loadShaders() {
 		@static TracyLoc zone = TracyLoc(null, "Client.loadShaders", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -983,8 +1038,8 @@ struct Client
 		colorBlending.blendConstants[3] = 0.0;
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-		pipelineLayoutInfo.setLayoutCount = 0; // Optional
-		pipelineLayoutInfo.pSetLayouts = null; // Optional
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
 		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
 		pipelineLayoutInfo.pPushConstantRanges = null; // Optional
 
@@ -1107,6 +1162,69 @@ struct Client
 
 		vkDestroyBuffer(device, stagingBuffer, null);
 		vkFreeMemory(device, stagingBufferMemory, null);
+	}
+
+	void createUniformBuffers() {
+		VkDeviceSize bufferSize = UniformBufferObject.sizeof;
+
+		uniformBuffers = resizeArray[VkBuffer](uniformBuffers, MAX_FRAMES_IN_FLIGHT);
+		uniformBuffersMemory = resizeArray[VkDeviceMemory](uniformBuffersMemory, MAX_FRAMES_IN_FLIGHT);
+
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i], &uniformBuffersMemory[i]);
+		}
+	}
+
+	void createDescriptorPool() {
+		VkDescriptorPoolSize poolSize;
+		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount = MAX_FRAMES_IN_FLIGHT;
+
+		VkDescriptorPoolCreateInfo poolInfo;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
+
+		if (vkCreateDescriptorPool(device, &poolInfo, null, &descriptorPool) != VK_SUCCESS) {
+			println("failed to create descriptor pool!");
+			isRunning = false;
+		}
+	}
+
+	void createDescriptorSets() {
+		VkDescriptorSetLayout[MAX_FRAMES_IN_FLIGHT] layouts;
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i)
+			layouts[i] = descriptorSetLayout;
+
+		VkDescriptorSetAllocateInfo allocInfo;
+		allocInfo.descriptorPool = descriptorPool;
+		allocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
+		allocInfo.pSetLayouts = layouts.ptr;
+
+		descriptorSets = resizeArray[VkDescriptorSet](descriptorSets, MAX_FRAMES_IN_FLIGHT);
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.ptr) != VK_SUCCESS) {
+			println("failed to allocate descriptor sets!");
+			isRunning = false;
+			return;
+		}
+
+		for (u64 i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
+			VkDescriptorBufferInfo bufferInfo;
+			bufferInfo.buffer = uniformBuffers[i];
+			bufferInfo.offset = 0;
+			bufferInfo.range = UniformBufferObject.sizeof;
+
+			VkWriteDescriptorSet descriptorWrite;
+			descriptorWrite.dstSet = descriptorSets[i];
+			descriptorWrite.dstBinding = 0;
+			descriptorWrite.dstArrayElement = 0;
+			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrite.descriptorCount = 1;
+			descriptorWrite.pBufferInfo = &bufferInfo;
+
+			vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, null);
+		}
 	}
 
 	void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
@@ -1241,6 +1359,8 @@ struct Client
 
 			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[imageIndex], 0, null);
+
 			vkCmdDrawIndexed(commandBuffer, cast(u32)indicies.length, 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(commandBuffer);
@@ -1277,7 +1397,19 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
-	void drawFrame() {
+	void updateUniformBuffer(u32 currentImage, f32 time) {
+		UniformBufferObject ubo;
+		ubo.model = rotationMatrixZ(time * degtorad(90));
+		ubo.view = lookAtMatrix(vec3(0, 0, -2), vec3(0, 0, 0), vec3(0, 1, 0));
+		ubo.proj = perspectiveMatrix(degtorad(45), cast(f32)swapChainExtent.height / swapChainExtent.width, 0.1, 10);
+
+		void* data;
+		vkMapMemory(device, uniformBuffersMemory[currentImage], 0, ubo.sizeof, 0, &data);
+			memcpy(data, &ubo, ubo.sizeof);
+		vkUnmapMemory(device, uniformBuffersMemory[currentImage]);
+	}
+
+	void drawFrame(f32 time) {
 		@static TracyLoc zone = TracyLoc(null, "Client.drawFrame", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		@static TracyLoc zone1 = TracyLoc(null, "vkWaitForFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
@@ -1303,6 +1435,8 @@ struct Client
 
 		vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+		updateUniformBuffer(imageIndex, time);
 
 		VkSubmitInfo submitInfo;
 
@@ -1369,7 +1503,7 @@ struct Client
 
 		shaderc_compilation_status status = shaderc_result_get_compilation_status(result);
 
-		println("Compiled `", filename, "` with ", numWarnings, " warnings, ", numErrors, " errors, status: ", cast(u32)status);
+		//println("Compiled `", filename, "` with ", numWarnings, " warnings, ", numErrors, " errors, status: ", cast(u32)status);
 
 		if (numWarnings != 0 || numErrors != 0) {
 			u8* msg = shaderc_result_get_error_message(result);
@@ -1581,7 +1715,7 @@ bool checkExtensions(u8*[] requestedExtensions, VkExtensionProperties[] availabl
 
 struct Vertex
 {
-	vec2 pos;
+	vec3 pos;
 	vec3 color;
 
 	@static VkVertexInputBindingDescription getBindingDescription() {
@@ -1598,7 +1732,7 @@ struct Vertex
 
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
-		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 		attributeDescriptions[0].offset = cast(u32)Vertex.pos.offsetof;
 
 		attributeDescriptions[1].binding = 0;
@@ -1608,4 +1742,10 @@ struct Vertex
 
 		return attributeDescriptions;
 	}
+}
+
+struct UniformBufferObject {
+	mat4 model;
+	mat4 view;
+	mat4 proj;
 }

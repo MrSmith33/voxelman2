@@ -3891,7 +3891,7 @@ enum VK_PIPELINE_SHADER_STAGE_CREATE_FLAG_BITS_MAX_ENUM                  = VkPip
 
 alias VkCullModeFlags = VkFlags;
 enum VkCullModeFlagBits : VkCullModeFlags {
-    VK_CULL_MODE_NONE                    = 0,
+    VK_CULL_MODE_NONE                    = 0x0,
     VK_CULL_MODE_FRONT_BIT               = 0x00000001,
     VK_CULL_MODE_BACK_BIT                = 0x00000002,
     VK_CULL_MODE_FRONT_AND_BACK          = 0x00000003,
