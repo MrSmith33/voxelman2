@@ -314,6 +314,7 @@ void registerHostSymbols(CompilationContext* context)
 	import deps.mimalloc;
 	import deps.shaderc;
 	import deps.tracy_ptr;
+	import deps.vma;
 	import deps.zstd;
 
 	regHostModule!(deps.enet)("enet");
@@ -324,6 +325,7 @@ void registerHostSymbols(CompilationContext* context)
 	regHostModule!(deps.mimalloc)("mimalloc");
 	regHostModule!(deps.shaderc)("shaderc");
 	regHostModule!(deps.tracy_ptr)("tracy");
+	regHostModule!(deps.vma)("vma");
 	regHostModule!(deps.zstd)("zstd");
 
 	// host

@@ -7769,6 +7769,21 @@ struct VkPerformanceQuerySubmitInfoKHR {
     uint32_t         counterPassIndex;
 }
 
+// VK_VERSION_1_3 (manually added)
+
+struct VkDeviceBufferMemoryRequirements {
+    VkStructureType        sType;
+    void*                  pNext;
+    VkBufferCreateInfo*    pCreateInfo;
+}
+
+struct VkDeviceImageMemoryRequirements {
+    VkStructureType       sType;
+    void*                 pNext;
+    VkImageCreateInfo*    pCreateInfo;
+    VkImageAspectFlagBits planeAspect;
+}
+
 
 // - VK_KHR_maintenance2 -
 enum VK_KHR_maintenance2 = 1;

@@ -25,8 +25,7 @@ Pass `--tracy` flag to the executable to enable tracy. Run the voxelman applicat
 ## Conventions
 
 * Right-handed coordinate system
-* 
-* Column vectors that are multiplied as `M * v`
+* Column vectors that are multiplied as `P⋅V⋅M⋅v`
 
 ## Getting deps
 
@@ -104,3 +103,26 @@ Or build/download them yourself:
    * Open `zstd-1.5.2/build/cmake/build/zstd.sln`
    * Select Release build and build `libzstd_static` project
    * Copy `zstd-1.5.2/build/cmake/build/lib/Release/zstd_static.lib`
+* Vulkan Memory Allocator
+  * Download [source code](https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator/archive/refs/tags/v3.0.0.zip)
+  * Go to `VulkanMemoryAllocator-3.0.0/`
+  * Execute in terminal
+    ```
+    mkdir build
+    cd build
+    cmake ..
+    ```
+  * Open `VulkanMemoryAllocator-3.0.0/build/VulkanMemoryAllocator.sln`
+  * Set preprocessor directives as:
+    ```C
+    VMA_STATIC_VULKAN_FUNCTIONS=0
+    VMA_DYNAMIC_VULKAN_FUNCTIONS=1
+    VMA_MEMORY_BUDGET=1
+    VMA_BIND_MEMORY2=1
+    VMA_DEDICATED_ALLOCATION=1
+    VMA_EXTERNAL_MEMORY=1
+    VMA_STATIC_VULKAN_FUNCTIONS=0
+    ```
+  * Switch to Vulkan 1.3 in `VulkanMemoryAllocator-3.0.0/src/VmaUsage.h` (uncomment `#define VMA_VULKAN_VERSION 1003000`)
+  * Build release version
+  * Copy `VulkanMemoryAllocator-3.0.0/build/src/Release/VulkanMemoryAllocator.lib`

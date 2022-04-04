@@ -1,0 +1,425 @@
+/// Original license:
+/// Copyright (c) 2017-2022 Advanced Micro Devices, Inc. All rights reserved.
+/// License: MIT
+
+module core.vulkan.vma;
+
+import core.vulkan.types;
+import core.vulkan.functions;
+
+@extern(module, "vma"):
+
+/// Flags for created #VmaAllocator.
+enum VmaAllocatorCreateFlagBits : u32
+{
+	VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT = 0x00000001,
+	VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT = 0x00000002,
+	VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT = 0x00000004,
+	VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT = 0x00000008,
+	VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT = 0x00000010,
+	VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT = 0x00000020,
+	VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT = 0x00000040,
+
+	VMA_ALLOCATOR_CREATE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// See VmaAllocatorCreateFlagBits
+alias VmaAllocatorCreateFlags = VkFlags;
+
+
+/// Intended usage of the allocated memory.
+enum VmaMemoryUsage : u32
+{
+	VMA_MEMORY_USAGE_UNKNOWN = 0,
+	VMA_MEMORY_USAGE_GPU_ONLY = 1,
+	VMA_MEMORY_USAGE_CPU_ONLY = 2,
+	VMA_MEMORY_USAGE_CPU_TO_GPU = 3,
+	VMA_MEMORY_USAGE_GPU_TO_CPU = 4,
+	VMA_MEMORY_USAGE_CPU_COPY = 5,
+	VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED = 6,
+	VMA_MEMORY_USAGE_AUTO = 7,
+	VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE = 8,
+	VMA_MEMORY_USAGE_AUTO_PREFER_HOST = 9,
+
+	VMA_MEMORY_USAGE_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// Flags to be passed as VmaAllocationCreateInfo::flags.
+enum VmaAllocationCreateFlagBits : u32
+{
+	VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT = 0x00000001,
+	VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT = 0x00000002,
+	VMA_ALLOCATION_CREATE_MAPPED_BIT = 0x00000004,
+	VMA_ALLOCATION_CREATE_USER_DATA_COPY_STRING_BIT = 0x00000020,
+	VMA_ALLOCATION_CREATE_UPPER_ADDRESS_BIT = 0x00000040,
+	VMA_ALLOCATION_CREATE_DONT_BIND_BIT = 0x00000080,
+	VMA_ALLOCATION_CREATE_WITHIN_BUDGET_BIT = 0x00000100,
+	VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT = 0x00000200,
+	VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT = 0x00000400,
+	VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT = 0x00000800,
+	VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT = 0x00001000,
+	VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT = 0x00010000,
+	VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT = 0x00020000,
+	VMA_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT  = 0x00040000,
+	VMA_ALLOCATION_CREATE_STRATEGY_BEST_FIT_BIT = VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT,
+	VMA_ALLOCATION_CREATE_STRATEGY_FIRST_FIT_BIT = VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT,
+	VMA_ALLOCATION_CREATE_STRATEGY_MASK =
+		VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT |
+		VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT |
+		VMA_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT,
+
+	VMA_ALLOCATION_CREATE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// See #VmaAllocationCreateFlagBits.
+alias VmaAllocationCreateFlags = VkFlags;
+
+/// Flags to be passed as VmaPoolCreateInfo::flags.
+enum VmaPoolCreateFlagBits : u32
+{
+	VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT = 0x00000002,
+	VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT = 0x00000004,
+	VMA_POOL_CREATE_ALGORITHM_MASK =
+		VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT,
+
+	VMA_POOL_CREATE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// Flags to be passed as VmaPoolCreateInfo::flags. See #VmaPoolCreateFlagBits.
+alias VmaPoolCreateFlags = VkFlags;
+
+/// Flags to be passed as VmaDefragmentationInfo::flags.
+enum VmaDefragmentationFlagBits : u32
+{
+	VMA_DEFRAGMENTATION_FLAG_ALGORITHM_FAST_BIT = 0x1,
+	VMA_DEFRAGMENTATION_FLAG_ALGORITHM_BALANCED_BIT = 0x2,
+	VMA_DEFRAGMENTATION_FLAG_ALGORITHM_FULL_BIT = 0x4,
+	VMA_DEFRAGMENTATION_FLAG_ALGORITHM_EXTENSIVE_BIT = 0x8,
+
+	/// A bit mask to extract only `ALGORITHM` bits from entire set of flags.
+	VMA_DEFRAGMENTATION_FLAG_ALGORITHM_MASK =
+		VMA_DEFRAGMENTATION_FLAG_ALGORITHM_FAST_BIT |
+		VMA_DEFRAGMENTATION_FLAG_ALGORITHM_BALANCED_BIT |
+		VMA_DEFRAGMENTATION_FLAG_ALGORITHM_FULL_BIT |
+		VMA_DEFRAGMENTATION_FLAG_ALGORITHM_EXTENSIVE_BIT,
+
+	VMA_DEFRAGMENTATION_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// See #VmaDefragmentationFlagBits.
+alias VmaDefragmentationFlags = VkFlags;
+
+/// Operation performed on single defragmentation move. See structure #VmaDefragmentationMove.
+enum VmaDefragmentationMoveOperation : u32
+{
+	/// Buffer/image has been recreated at `dstTmpAllocation`, data has been copied, old buffer/image has been destroyed. `srcAllocation` should be changed to point to the new place. This is the default value set by vmaBeginDefragmentationPass().
+	VMA_DEFRAGMENTATION_MOVE_OPERATION_COPY = 0,
+	/// Set this value if you cannot move the allocation. New place reserved at `dstTmpAllocation` will be freed. `srcAllocation` will remain unchanged.
+	VMA_DEFRAGMENTATION_MOVE_OPERATION_IGNORE = 1,
+	/// Set this value if you decide to abandon the allocation and you destroyed the buffer/image. New place reserved at `dstTmpAllocation` will be freed, along with `srcAllocation`, which will be destroyed.
+	VMA_DEFRAGMENTATION_MOVE_OPERATION_DESTROY = 2,
+}
+
+
+/// Flags to be passed as VmaVirtualBlockCreateInfo::flags.
+enum VmaVirtualBlockCreateFlagBits : u32
+{
+	VMA_VIRTUAL_BLOCK_CREATE_LINEAR_ALGORITHM_BIT = 0x00000001,
+	VMA_VIRTUAL_BLOCK_CREATE_ALGORITHM_MASK =
+		VMA_VIRTUAL_BLOCK_CREATE_LINEAR_ALGORITHM_BIT,
+
+	VMA_VIRTUAL_BLOCK_CREATE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// Flags to be passed as VmaVirtualBlockCreateInfo::flags. See #VmaVirtualBlockCreateFlagBits.
+alias VmaVirtualBlockCreateFlags = VkFlags;
+
+/// Flags to be passed as VmaVirtualAllocationCreateInfo::flags.
+enum VmaVirtualAllocationCreateFlagBits : u32
+{
+	VMA_VIRTUAL_ALLOCATION_CREATE_UPPER_ADDRESS_BIT = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_UPPER_ADDRESS_BIT,
+	VMA_VIRTUAL_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_STRATEGY_MIN_MEMORY_BIT,
+	VMA_VIRTUAL_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_STRATEGY_MIN_TIME_BIT,
+	VMA_VIRTUAL_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_STRATEGY_MIN_OFFSET_BIT,
+	VMA_VIRTUAL_ALLOCATION_CREATE_STRATEGY_MASK = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_STRATEGY_MASK,
+
+	VMA_VIRTUAL_ALLOCATION_CREATE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+/// Flags to be passed as VmaVirtualAllocationCreateInfo::flags. See #VmaVirtualAllocationCreateFlagBits.
+alias VmaVirtualAllocationCreateFlags = VkFlags;
+
+struct VmaAllocator_handle; alias VmaAllocator = VmaAllocator_handle*;
+struct VmaPool_handle; alias VmaPool = VmaPool_handle*;
+struct VmaAllocation_handle; alias VmaAllocation = VmaAllocation_handle*;
+struct VmaDefragmentationContext_handle; alias VmaDefragmentationContext = VmaDefragmentationContext_handle*;
+struct VmaVirtualBlock_handle; alias VmaVirtualBlock = VmaVirtualBlock_handle*;
+struct VmaVirtualAllocation_handle; alias VmaVirtualAllocation = VmaVirtualAllocation_handle*;
+struct VmaAllocHandle_handle; alias VmaAllocHandle = VmaAllocHandle_handle*;
+
+VkResult vmaCreateAllocator(VmaAllocatorCreateInfo* pCreateInfo, VmaAllocator* pAllocator);
+void vmaDestroyAllocator(VmaAllocator allocator);
+void vmaGetAllocatorInfo(VmaAllocator allocator, VmaAllocatorInfo* pAllocatorInfo);
+void vmaGetPhysicalDeviceProperties(VmaAllocator allocator, VkPhysicalDeviceProperties** ppPhysicalDeviceProperties);
+void vmaGetMemoryProperties(VmaAllocator allocator, VkPhysicalDeviceMemoryProperties** ppPhysicalDeviceMemoryProperties);
+void vmaGetMemoryTypeProperties(VmaAllocator allocator, u32 memoryTypeIndex, VkMemoryPropertyFlags* pFlags);
+void vmaSetCurrentFrameIndex(VmaAllocator allocator, u32 frameIndex);
+void vmaCalculateStatistics(VmaAllocator allocator, VmaTotalStatistics* pStats);
+void vmaGetHeapBudgets(VmaAllocator allocator, VmaBudget* pBudgets);
+VkResult vmaFindMemoryTypeIndex(VmaAllocator allocator, u32 memoryTypeBits, VmaAllocationCreateInfo* pAllocationCreateInfo, u32* pMemoryTypeIndex);
+VkResult vmaFindMemoryTypeIndexForBufferInfo(VmaAllocator allocator, VkBufferCreateInfo* pBufferCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, u32* pMemoryTypeIndex);
+VkResult vmaFindMemoryTypeIndexForImageInfo(VmaAllocator allocator, VkImageCreateInfo* pImageCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, u32* pMemoryTypeIndex);
+VkResult vmaCreatePool(VmaAllocator allocator, VmaPoolCreateInfo* pCreateInfo, VmaPool* pPool);
+void vmaDestroyPool(VmaAllocator allocator, VmaPool pool);
+void vmaGetPoolStatistics(VmaAllocator allocator, VmaPool pool, VmaStatistics* pPoolStats);
+void vmaCalculatePoolStatistics(VmaAllocator allocator, VmaPool pool, VmaDetailedStatistics* pPoolStats);
+VkResult vmaCheckPoolCorruption(VmaAllocator allocator, VmaPool pool);
+void vmaGetPoolName(VmaAllocator allocator, VmaPool pool, u8** ppName);
+void vmaSetPoolName(VmaAllocator allocator, VmaPool pool, u8* pName);
+VkResult vmaAllocateMemory(VmaAllocator allocator, VkMemoryRequirements* pVkMemoryRequirements, VmaAllocationCreateInfo* pCreateInfo, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaAllocateMemoryPages(VmaAllocator allocator, VkMemoryRequirements* pVkMemoryRequirements, VmaAllocationCreateInfo* pCreateInfo, u64 allocationCount, VmaAllocation* pAllocations, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaAllocateMemoryForBuffer(VmaAllocator allocator, VkBuffer buffer, VmaAllocationCreateInfo* pCreateInfo, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaAllocateMemoryForImage(VmaAllocator allocator, VkImage image, VmaAllocationCreateInfo* pCreateInfo, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+void vmaFreeMemory(VmaAllocator allocator, VmaAllocation allocation);
+void vmaFreeMemoryPages(VmaAllocator allocator, u64 allocationCount, VmaAllocation* pAllocations);
+void vmaGetAllocationInfo(VmaAllocator allocator, VmaAllocation allocation, VmaAllocationInfo* pAllocationInfo);
+void vmaSetAllocationUserData(VmaAllocator allocator, VmaAllocation allocation, void* pUserData);
+void vmaSetAllocationName(VmaAllocator allocator, VmaAllocation allocation, u8* pName);
+void vmaGetAllocationMemoryProperties(VmaAllocator allocator, VmaAllocation allocation, VkMemoryPropertyFlags* pFlags);
+VkResult vmaMapMemory(VmaAllocator allocator, VmaAllocation allocation, void** ppData);
+void vmaUnmapMemory(VmaAllocator allocator, VmaAllocation allocation);
+VkResult vmaFlushAllocation(VmaAllocator allocator, VmaAllocation allocation, VkDeviceSize offset, VkDeviceSize size);
+VkResult vmaInvalidateAllocation(VmaAllocator allocator, VmaAllocation allocation, VkDeviceSize offset, VkDeviceSize size);
+VkResult vmaFlushAllocations(VmaAllocator allocator, u32 allocationCount, VmaAllocation* allocations, VkDeviceSize* offsets, VkDeviceSize* sizes);
+VkResult vmaInvalidateAllocations(VmaAllocator allocator, u32 allocationCount, VmaAllocation* allocations, VkDeviceSize* offsets, VkDeviceSize* sizes);
+VkResult vmaCheckCorruption(VmaAllocator allocator, u32 memoryTypeBits);
+VkResult vmaBeginDefragmentation(VmaAllocator allocator, VmaDefragmentationInfo* pInfo, VmaDefragmentationContext* pContext);
+void vmaEndDefragmentation(VmaAllocator allocator, VmaDefragmentationContext context, VmaDefragmentationStats* pStats);
+VkResult vmaBeginDefragmentationPass(VmaAllocator allocator, VmaDefragmentationContext context, VmaDefragmentationPassMoveInfo* pPassInfo);
+VkResult vmaEndDefragmentationPass(VmaAllocator allocator, VmaDefragmentationContext context, VmaDefragmentationPassMoveInfo* pPassInfo);
+VkResult vmaBindBufferMemory(VmaAllocator allocator, VmaAllocation allocation, VkBuffer buffer);
+VkResult vmaBindBufferMemory2(VmaAllocator allocator, VmaAllocation allocation, VkDeviceSize allocationLocalOffset, VkBuffer buffer, void* pNext);
+VkResult vmaBindImageMemory(VmaAllocator allocator, VmaAllocation allocation, VkImage image);
+VkResult vmaBindImageMemory2(VmaAllocator allocator, VmaAllocation allocation, VkDeviceSize allocationLocalOffset, VkImage image, void* pNext);
+VkResult vmaCreateBuffer(VmaAllocator allocator, VkBufferCreateInfo* pBufferCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, VkBuffer* pBuffer, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaCreateBufferWithAlignment(VmaAllocator allocator, VkBufferCreateInfo* pBufferCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, VkDeviceSize minAlignment, VkBuffer* pBuffer, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaCreateAliasingBuffer(VmaAllocator allocator, VmaAllocation allocation, VkBufferCreateInfo* pBufferCreateInfo, VkBuffer* pBuffer);
+void vmaDestroyBuffer(VmaAllocator allocator, VkBuffer buffer, VmaAllocation allocation);
+VkResult vmaCreateImage(VmaAllocator allocator, VkImageCreateInfo* pImageCreateInfo, VmaAllocationCreateInfo* pAllocationCreateInfo, VkImage* pImage, VmaAllocation* pAllocation, VmaAllocationInfo* pAllocationInfo);
+VkResult vmaCreateAliasingImage(VmaAllocator allocator, VmaAllocation allocation, VkImageCreateInfo* pImageCreateInfo, VkImage* pImage);
+void vmaDestroyImage(VmaAllocator allocator, VkImage image, VmaAllocation allocation);
+VkResult vmaCreateVirtualBlock(VmaVirtualBlockCreateInfo* pCreateInfo, VmaVirtualBlock* pVirtualBlock);
+void vmaDestroyVirtualBlock(VmaVirtualBlock virtualBlock);
+VkBool32 vmaIsVirtualBlockEmpty(VmaVirtualBlock virtualBlock);
+void vmaGetVirtualAllocationInfo(VmaVirtualBlock virtualBlock, VmaVirtualAllocation allocation, VmaVirtualAllocationInfo* pVirtualAllocInfo);
+VkResult vmaVirtualAllocate(VmaVirtualBlock virtualBlock, VmaVirtualAllocationCreateInfo* pCreateInfo, VmaVirtualAllocation* pAllocation, VkDeviceSize* pOffset);
+void vmaVirtualFree(VmaVirtualBlock virtualBlock, VmaVirtualAllocation allocation);
+void vmaClearVirtualBlock(VmaVirtualBlock virtualBlock);
+void vmaSetVirtualAllocationUserData(VmaVirtualBlock virtualBlock, VmaVirtualAllocation allocation, void* pUserData);
+void vmaGetVirtualBlockStatistics(VmaVirtualBlock virtualBlock, VmaStatistics* pStats);
+void vmaCalculateVirtualBlockStatistics(VmaVirtualBlock virtualBlock, VmaDetailedStatistics* pStats);
+
+
+/// Callback function called after successful vkAllocateMemory.
+alias PFN_vmaAllocateDeviceMemoryFunction = void function(
+	VmaAllocator   allocator,
+	u32            memoryType,
+	VkDeviceMemory memory,
+	VkDeviceSize   size,
+	void*          pUserData);
+
+/// Callback function called before vkFreeMemory.
+alias PFN_vmaFreeDeviceMemoryFunction = void function (
+	VmaAllocator   allocator,
+	u32            memoryType,
+	VkDeviceMemory memory,
+	VkDeviceSize   size,
+	void*          pUserData);
+
+struct VmaDeviceMemoryCallbacks
+{
+	/// Optional, can be null.
+	PFN_vmaAllocateDeviceMemoryFunction pfnAllocate;
+	/// Optional, can be null.
+	PFN_vmaFreeDeviceMemoryFunction pfnFree;
+	/// Optional, can be null.
+	void* pUserData;
+}
+
+struct VmaVulkanFunctions
+{
+	/// Required when using VMA_DYNAMIC_VULKAN_FUNCTIONS.
+	PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+	/// Required when using VMA_DYNAMIC_VULKAN_FUNCTIONS.
+	PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
+	PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
+	PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties;
+	PFN_vkAllocateMemory vkAllocateMemory;
+	PFN_vkFreeMemory vkFreeMemory;
+	PFN_vkMapMemory vkMapMemory;
+	PFN_vkUnmapMemory vkUnmapMemory;
+	PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges;
+	PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges;
+	PFN_vkBindBufferMemory vkBindBufferMemory;
+	PFN_vkBindImageMemory vkBindImageMemory;
+	PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements;
+	PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements;
+	PFN_vkCreateBuffer vkCreateBuffer;
+	PFN_vkDestroyBuffer vkDestroyBuffer;
+	PFN_vkCreateImage vkCreateImage;
+	PFN_vkDestroyImage vkDestroyImage;
+	PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
+	/// Fetch "vkGetBufferMemoryRequirements2" on Vulkan >= 1.1, fetch "vkGetBufferMemoryRequirements2KHR" when using VK_KHR_dedicated_allocation extension.
+	PFN_vkGetBufferMemoryRequirements2 vkGetBufferMemoryRequirements2KHR;
+	/// Fetch "vkGetImageMemoryRequirements 2" on Vulkan >= 1.1, fetch "vkGetImageMemoryRequirements2KHR" when using VK_KHR_dedicated_allocation extension.
+	PFN_vkGetImageMemoryRequirements2 vkGetImageMemoryRequirements2KHR;
+	/// Fetch "vkBindBufferMemory2" on Vulkan >= 1.1, fetch "vkBindBufferMemory2KHR" when using VK_KHR_bind_memory2 extension.
+	PFN_vkBindBufferMemory2 vkBindBufferMemory2KHR;
+	/// Fetch "vkBindImageMemory2" on Vulkan >= 1.1, fetch "vkBindImageMemory2KHR" when using VK_KHR_bind_memory2 extension.
+	PFN_vkBindImageMemory2 vkBindImageMemory2KHR;
+	PFN_vkGetPhysicalDeviceMemoryProperties2 vkGetPhysicalDeviceMemoryProperties2KHR;
+	/// Fetch from "vkGetDeviceBufferMemoryRequirements" on Vulkan >= 1.3, but you can also fetch it from "vkGetDeviceBufferMemoryRequirementsKHR" if you enabled extension VK_KHR_maintenance4.
+	PFN_vkGetDeviceBufferMemoryRequirements vkGetDeviceBufferMemoryRequirements;
+	/// Fetch from "vkGetDeviceImageMemoryRequirements" on Vulkan >= 1.3, but you can also fetch it from "vkGetDeviceImageMemoryRequirementsKHR" if you enabled extension VK_KHR_maintenance4.
+	PFN_vkGetDeviceImageMemoryRequirements vkGetDeviceImageMemoryRequirements;
+}
+
+struct VmaAllocatorInfo
+{
+	VkInstance instance;
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
+}
+
+struct VmaStatistics
+{
+	u32 blockCount;
+	u32 allocationCount;
+	VkDeviceSize blockBytes;
+	VkDeviceSize allocationBytes;
+}
+
+struct VmaDetailedStatistics
+{
+	VmaStatistics statistics;
+	u32 unusedRangeCount;
+	VkDeviceSize allocationSizeMin;
+	VkDeviceSize allocationSizeMax;
+	VkDeviceSize unusedRangeSizeMin;
+	VkDeviceSize unusedRangeSizeMax;
+}
+
+struct VmaTotalStatistics
+{
+	VmaDetailedStatistics[VK_MAX_MEMORY_TYPES] memoryType;
+	VmaDetailedStatistics[VK_MAX_MEMORY_HEAPS] memoryHeap;
+	VmaDetailedStatistics total;
+}
+
+struct VmaBudget
+{
+	VmaStatistics statistics;
+	VkDeviceSize usage;
+	VkDeviceSize budget;
+}
+
+struct VmaAllocationCreateInfo
+{
+	VmaAllocationCreateFlags flags;
+	VmaMemoryUsage usage;
+	VkMemoryPropertyFlags requiredFlags;
+	VkMemoryPropertyFlags preferredFlags;
+	u32 memoryTypeBits;
+	VmaPool pool;
+	void* pUserData;
+	float priority;
+}
+
+struct VmaPoolCreateInfo
+{
+	u32 memoryTypeIndex;
+	VmaPoolCreateFlags flags;
+	VkDeviceSize blockSize;
+	u64 minBlockCount;
+	u64 maxBlockCount;
+	float priority;
+	VkDeviceSize minAllocationAlignment;
+	void* pMemoryAllocateNext;
+}
+
+struct VmaAllocationInfo
+{
+	u32 memoryType;
+	VkDeviceMemory deviceMemory;
+	VkDeviceSize offset;
+	VkDeviceSize size;
+	void* pMappedData;
+	void* pUserData;
+	u8* pName;
+}
+
+struct VmaDefragmentationInfo
+{
+	VmaDefragmentationFlags flags;
+	VmaPool pool;
+	VkDeviceSize maxBytesPerPass;
+	u32 maxAllocationsPerPass;
+}
+
+struct VmaDefragmentationMove
+{
+	VmaDefragmentationMoveOperation operation;
+	VmaAllocation srcAllocation;
+	VmaAllocation dstTmpAllocation;
+}
+
+struct VmaDefragmentationPassMoveInfo
+{
+	u32 moveCount;
+	VmaDefragmentationMove* pMoves;
+}
+
+struct VmaDefragmentationStats
+{
+	VkDeviceSize bytesMoved;
+	VkDeviceSize bytesFreed;
+	u32 allocationsMoved;
+	u32 deviceMemoryBlocksFreed;
+}
+
+struct VmaVirtualBlockCreateInfo
+{
+	VkDeviceSize size;
+	VmaVirtualBlockCreateFlags flags;
+	VkAllocationCallbacks* pAllocationCallbacks;
+}
+
+struct VmaVirtualAllocationCreateInfo
+{
+	VkDeviceSize size;
+	VkDeviceSize alignment;
+	VmaVirtualAllocationCreateFlags flags;
+	void* pUserData;
+}
+
+struct VmaVirtualAllocationInfo
+{
+	VkDeviceSize offset;
+	VkDeviceSize size;
+	void* pUserData;
+}
+
+struct VmaAllocatorCreateInfo
+{
+	VmaAllocatorCreateFlags flags;
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
+	VkDeviceSize preferredLargeHeapBlockSize;
+	VkAllocationCallbacks* pAllocationCallbacks;
+	VmaDeviceMemoryCallbacks* pDeviceMemoryCallbacks;
+	VkDeviceSize* pHeapSizeLimit;
+	VmaVulkanFunctions* pVulkanFunctions;
+	VkInstance instance;
+	u32 vulkanApiVersion;
+	VkExternalMemoryHandleTypeFlagsKHR* pTypeExternalMemoryHandleTypes;
+}

@@ -15,6 +15,7 @@ import core.utils;
 import core.vector;
 import core.vulkan.functions;
 import core.vulkan.types;
+import core.vulkan.vma;
 
 
 void main()
@@ -58,6 +59,8 @@ struct Client
 	VkPhysicalDevice physicalDevice;
 	SwapChainSupportDetails swapChainSupport; // result of querySwapChainSupport on physicalDevice
 	VkDevice device; // logical device
+
+	VmaAllocator vmallocator;
 
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
@@ -217,7 +220,8 @@ struct Client
 			return;
 		}
 
-		loadGlobalLevelFunctions( cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr"));
+		PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr");
+		loadGlobalLevelFunctions(vkGetInstanceProcAddr);
 
 		createInstance();
 		if (!isRunning) return;
@@ -229,7 +233,9 @@ struct Client
 		if (!isRunning) return;
 		createLogicalDevice();
 		if (!isRunning) return;
-		createSwapChain();
+		createAllocator(vkGetInstanceProcAddr);
+		if (!isRunning) return;
+		createSwapChain(null);
 		if (!isRunning) return;
 		createImageViews();
 		if (!isRunning) return;
@@ -300,12 +306,16 @@ struct Client
 	{
 		@static TracyLoc zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
+		vmaDestroyAllocator(vmallocator);
+
 		swapChainSupport.free();
 
 		vkDestroyShaderModule(device, vertShaderModule, null);
 		vkDestroyShaderModule(device, fragShaderModule, null);
 
 		cleanupSwapChain();
+
+		vkDestroySwapchainKHR(device, swapChain, null);
 
 		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, null);
 
@@ -365,8 +375,6 @@ struct Client
 			vkDestroyImageView(device, swapChainImageViews[i], null);
 		}
 		//swapChainImageViews = freeArray[VkImageView](swapChainImageViews);
-
-		vkDestroySwapchainKHR(device, swapChain, null);
 	}
 
 	void recreateSwapChain() {
@@ -384,11 +392,18 @@ struct Client
 
 		vkDeviceWaitIdle(device);
 
+		VkSwapchainKHR oldSwapchain = swapChain;
+		swapChain = null;
+
 		cleanupSwapChain();
 
 		querySwapChainSupport(physicalDevice, &swapChainSupport);
 
-		createSwapChain();
+		createSwapChain(oldSwapchain);
+
+		if (oldSwapchain)
+			vkDestroySwapchainKHR(device, oldSwapchain, null);
+
 		if (!isRunning) return;
 		createImageViews();
 		if (!isRunning) return;
@@ -487,6 +502,22 @@ struct Client
 		createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		createInfo.pfnUserCallback = &debugCallback;
 		createInfo.pUserData = null; // Optional
+	}
+
+	void createAllocator(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
+	{
+		VmaVulkanFunctions vulkanFunctions;
+		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		vulkanFunctions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo allocatorCreateInfo;
+		allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_0;
+		allocatorCreateInfo.physicalDevice = physicalDevice;
+		allocatorCreateInfo.device = device;
+		allocatorCreateInfo.instance = instance;
+		allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
+
+		vmaCreateAllocator(&allocatorCreateInfo, &vmallocator);
 	}
 
 	void setupDebugMessenger() {
@@ -763,7 +794,7 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
-	void createSwapChain() {
+	void createSwapChain(VkSwapchainKHR oldSwapchain) {
 		@static TracyLoc zone = TracyLoc(null, "Client.createSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -802,7 +833,7 @@ struct Client
 		createInfo.presentMode = presentMode;
 		createInfo.clipped = VK_TRUE;
 
-		createInfo.oldSwapchain = null;
+		createInfo.oldSwapchain = oldSwapchain;
 
 		@static TracyLoc zone2 = TracyLoc(null, "vkCreateSwapchainKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx_vkCreateSwapchainKHR = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		if (vkCreateSwapchainKHR(device, &createInfo, null, &swapChain) != VK_SUCCESS) {
@@ -1416,6 +1447,10 @@ struct Client
 		vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, u64.max);
 		tracy_emit_zone_end(ctx1);
 
+		@static TracyLoc zone4 = TracyLoc(null, "vkResetFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
+		vkResetFences(device, 1, &inFlightFences[currentFrame]);
+		tracy_emit_zone_end(ctx4);
+
 		u32 imageIndex;
 		@static TracyLoc zone2 = TracyLoc(null, "vkAcquireNextImageKHR", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx2 = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		VkResult result = vkAcquireNextImageKHR(device, swapChain, u64.max, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
@@ -1428,10 +1463,6 @@ struct Client
 			return;
 		}
 		tracy_emit_zone_end(ctx2);
-
-		@static TracyLoc zone4 = TracyLoc(null, "vkResetFences", "main.vx", cast(u32)__LINE__, 0x000000); TracyZoneCtx ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
-		vkResetFences(device, 1, &inFlightFences[currentFrame]);
-		tracy_emit_zone_end(ctx4);
 
 		vkResetCommandBuffer(commandBuffers[currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
 		recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
@@ -1748,4 +1779,9 @@ struct UniformBufferObject {
 	mat4 model;
 	mat4 view;
 	mat4 proj;
+}
+
+struct AllocatedBuffer {
+	VkBuffer buffer;
+	VmaAllocation allocation;
 }

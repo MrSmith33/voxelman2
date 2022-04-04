@@ -194,6 +194,10 @@ alias PFN_vkGetBufferDeviceAddress                                          = Vk
 alias PFN_vkGetBufferOpaqueCaptureAddress                                   = uint64_t  function( VkDevice device, VkBufferDeviceAddressInfo* pInfo );
 alias PFN_vkGetDeviceMemoryOpaqueCaptureAddress                             = uint64_t  function( VkDevice device, VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo );
 
+// VK_VERSION_1_3 (manually added)
+alias PFN_vkGetDeviceBufferMemoryRequirements                               = void      function( VkDevice device, VkDeviceBufferMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements );
+alias PFN_vkGetDeviceImageMemoryRequirements                                = void      function( VkDevice device, VkDeviceImageMemoryRequirements* pInfo, VkMemoryRequirements2* pMemoryRequirements );
+
 // VK_KHR_surface
 alias PFN_vkDestroySurfaceKHR                                               = void      function( VkInstance instance, VkSurfaceKHR surface, VkAllocationCallbacks* pAllocator );
 alias PFN_vkGetPhysicalDeviceSurfaceSupportKHR                              = VkResult  function( VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex, VkSurfaceKHR surface, VkBool32* pSupported );
@@ -697,6 +701,10 @@ PFN_vkSignalSemaphore                                                 vkSignalSe
 PFN_vkGetBufferDeviceAddress                                          vkGetBufferDeviceAddress;
 PFN_vkGetBufferOpaqueCaptureAddress                                   vkGetBufferOpaqueCaptureAddress;
 PFN_vkGetDeviceMemoryOpaqueCaptureAddress                             vkGetDeviceMemoryOpaqueCaptureAddress;
+
+// VK_VERSION_1_3 (manually added)
+PFN_vkGetDeviceBufferMemoryRequirements                               vkGetDeviceBufferMemoryRequirements;
+PFN_vkGetDeviceImageMemoryRequirements                                vkGetDeviceImageMemoryRequirements;
 
 // VK_KHR_surface
 PFN_vkDestroySurfaceKHR                                               vkDestroySurfaceKHR;
@@ -1380,6 +1388,10 @@ void loadDeviceLevelFunctions( VkInstance instance ) {
     vkGetBufferOpaqueCaptureAddress                   = cast( PFN_vkGetBufferOpaqueCaptureAddress                   ) vkGetInstanceProcAddr( instance, "vkGetBufferOpaqueCaptureAddress" );
     vkGetDeviceMemoryOpaqueCaptureAddress             = cast( PFN_vkGetDeviceMemoryOpaqueCaptureAddress             ) vkGetInstanceProcAddr( instance, "vkGetDeviceMemoryOpaqueCaptureAddress" );
 
+    // VK_VERSION_1_3 (manually added)
+    vkGetDeviceBufferMemoryRequirements               = cast( PFN_vkGetDeviceBufferMemoryRequirements               ) vkGetInstanceProcAddr( instance, "vkGetDeviceBufferMemoryRequirements" );
+    vkGetDeviceImageMemoryRequirements                = cast( PFN_vkGetDeviceImageMemoryRequirements                ) vkGetInstanceProcAddr( instance, "vkGetDeviceImageMemoryRequirements" );
+
     // VK_KHR_swapchain
     vkCreateSwapchainKHR                              = cast( PFN_vkCreateSwapchainKHR                              ) vkGetInstanceProcAddr( instance, "vkCreateSwapchainKHR" );
     vkDestroySwapchainKHR                             = cast( PFN_vkDestroySwapchainKHR                             ) vkGetInstanceProcAddr( instance, "vkDestroySwapchainKHR" );
@@ -1798,6 +1810,10 @@ void loadDeviceLevelFunctionsDirect( VkDevice device ) {
     vkGetBufferDeviceAddress                          = cast( PFN_vkGetBufferDeviceAddress                          ) vkGetDeviceProcAddr( device, "vkGetBufferDeviceAddress" );
     vkGetBufferOpaqueCaptureAddress                   = cast( PFN_vkGetBufferOpaqueCaptureAddress                   ) vkGetDeviceProcAddr( device, "vkGetBufferOpaqueCaptureAddress" );
     vkGetDeviceMemoryOpaqueCaptureAddress             = cast( PFN_vkGetDeviceMemoryOpaqueCaptureAddress             ) vkGetDeviceProcAddr( device, "vkGetDeviceMemoryOpaqueCaptureAddress" );
+
+    // VK_VERSION_1_3 (manually added)
+    vkGetDeviceBufferMemoryRequirements               = cast( PFN_vkGetDeviceBufferMemoryRequirements               ) vkGetDeviceProcAddr( device, "vkGetDeviceBufferMemoryRequirements" );
+    vkGetDeviceImageMemoryRequirements                = cast( PFN_vkGetDeviceImageMemoryRequirements                ) vkGetDeviceProcAddr( device, "vkGetDeviceImageMemoryRequirements" );
 
     // VK_KHR_swapchain
     vkCreateSwapchainKHR                              = cast( PFN_vkCreateSwapchainKHR                              ) vkGetDeviceProcAddr( device, "vkCreateSwapchainKHR" );
