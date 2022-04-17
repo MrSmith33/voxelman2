@@ -50,6 +50,7 @@ struct VkContext {
 
 	VkCommandPool commandPool;
 	VkDescriptorPool descriptorPool;
+	VkFence uploadFence;
 
 	enum u32 NUM_FRAMES = 2;
 	u32 frameIndex; // 0, 1
@@ -259,6 +260,7 @@ struct Client
 		if (pickPhysicalDevice() != OK) return Status.ERR;
 		if (createLogicalDevice() != OK) return Status.ERR;
 		if (createAllocator(vkGetInstanceProcAddr) != OK) return Status.ERR;
+		if (createSyncObjects() != OK) return Status.ERR;
 		if (createSwapChain(null) != OK) return Status.ERR;
 		if (createImageViews() != OK) return Status.ERR;
 		if (createRenderPass() != OK) return Status.ERR;
@@ -273,7 +275,6 @@ struct Client
 		if (createDescriptorPool() != OK) return Status.ERR;
 		if (createDescriptorSets() != OK) return Status.ERR;
 		if (createCommandBuffers() != OK) return Status.ERR;
-		if (createSyncObjects() != OK) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
 
@@ -343,6 +344,8 @@ struct Client
 			vkDestroySemaphore(vkcontext.device, vkcontext.frames[i].imageAvailableSemaphore, null);
 			vkDestroyFence(vkcontext.device, vkcontext.frames[i].inFlightFence, null);
 		}
+
+		vkDestroyFence(vkcontext.device, vkcontext.uploadFence, null);
 
 		vkDestroyCommandPool(vkcontext.device, vkcontext.commandPool, null);
 
@@ -1182,6 +1185,7 @@ struct Client
 	}
 
 	Status createIndexBuffer() {
+		@static auto zone = TracyLoc(null, "Client.createIndexBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		VkDeviceSize bufferSize = indicies.sizeof;
 
 		VkBuffer stagingBuffer;
@@ -1200,10 +1204,12 @@ struct Client
 
 		vkDestroyBuffer(vkcontext.device, stagingBuffer, null);
 		vkFreeMemory(vkcontext.device, stagingBufferMemory, null);
+		tracy_emit_zone_end(ctx);
 		return Status.OK;
 	}
 
 	Status createUniformBuffers() {
+		@static auto zone = TracyLoc(null, "Client.createUniformBuffers", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		VkDeviceSize bufferSize = UniformBufferObject.sizeof;
 
 		uniformBuffers = resizeArray[VkBuffer](uniformBuffers, vkcontext.NUM_FRAMES);
@@ -1212,6 +1218,7 @@ struct Client
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i], &uniformBuffersMemory[i]);
 		}
+		tracy_emit_zone_end(ctx);
 		return Status.OK;
 	}
 
@@ -1300,6 +1307,7 @@ struct Client
 	}
 
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+		@static auto zone = TracyLoc(null, "Client.copyBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		VkCommandBufferAllocateInfo allocInfo;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandPool = vkcontext.commandPool;
@@ -1325,10 +1333,12 @@ struct Client
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffer;
 
-		vkQueueSubmit(vkcontext.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-		vkQueueWaitIdle(vkcontext.graphicsQueue);
+		vkQueueSubmit(vkcontext.graphicsQueue, 1, &submitInfo, vkcontext.uploadFence);
+		vkWaitForFences(vkcontext.device, 1, &vkcontext.uploadFence, VK_TRUE, u64.max);
+		vkResetFences(vkcontext.device, 1, &vkcontext.uploadFence);
 
 		vkFreeCommandBuffers(vkcontext.device, vkcontext.commandPool, 1, &commandBuffer);
+		tracy_emit_zone_end(ctx);
 	}
 
 	Status findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties, u32* memType) {
@@ -1433,6 +1443,9 @@ struct Client
 				return Status.ERR;
 			}
 		}
+
+		VkFenceCreateInfo fenceInfo2;
+		if (vkCreateFence(vkcontext.device, &fenceInfo2, null, &vkcontext.uploadFence) != VK_SUCCESS) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
