@@ -54,7 +54,7 @@ void main(string[] args) {
 
 	// add files
 	registerHostSymbols(&driver.context);
-	registerPackages(driver, entryPoint);
+	Identifier mainModule = registerPackages(driver, entryPoint);
 
 	auto times = PerPassTimeMeasurements(1, driver.passes);
 
@@ -87,8 +87,15 @@ void main(string[] args) {
 	//writefln("Total %ss", scaledNumberFmt(endTime - startTime));
 	stdout.flush;
 
-	auto runFunc = driver.context.getFunctionPtr!(void)("main", "main");
-	runFunc();
+	Identifier main_id = driver.context.idMap.getOrReg(&driver.context, "main");
+	Identifier funcId = driver.context.idMap.getOrRegFqn(&driver.context, FullyQualifiedName(mainModule, main_id));
+	try {
+		FunctionDeclNode* func = driver.context.findFunction(funcId);
+		auto mainFunc = driver.context.getFunctionPtr!void(func);
+		mainFunc();
+	} catch(CompilationException e) {
+		writeln(driver.context.errorSink.text);
+	}
 }
 
 struct RawPluginInfo
@@ -97,15 +104,17 @@ struct RawPluginInfo
 	string[] dependencies; // plugin names found in plugin/deps.txt
 	string[] sourceFiles;  // .vx files inside      plugin/src/ dir
 	string[] resFiles;     // resource files inside plugin/res/ dir (currently .frag and .vert)
+	Identifier mainModule;
 	string mainFile;
 	bool isOnStack;
 	bool isSelected;
 }
 
-void registerPackages(ref Driver driver, string rootPluginName)
+// Returns name of the entry function
+Identifier registerPackages(ref Driver driver, string rootPluginName)
 {
 	import std.file : dirEntries, SpanMode, DirEntry;
-	import std.path : buildPath, pathSplitter, extension, baseName;
+	import std.path : buildPath, pathSplitter, extension, baseName, stripExtension;
 	import std.range : back;
 
 	auto startTime = currTime;
@@ -125,31 +134,45 @@ void registerPackages(ref Driver driver, string rootPluginName)
 		info.dependencies = cast(string[])data.lineSplitter.filter!(line => !line.empty).array;
 	}
 
-	static void onPluginSrcDir(ref RawPluginInfo info, string srcDir)
+	static void onPluginSrcDir(ref Driver driver, ref RawPluginInfo info, string srcDir)
 	{
 		//writefln("-d src");
 		bool foundMainFile = false;
-		foreach (DirEntry srcEntry; dirEntries(srcDir, SpanMode.depth, false))
-		{
-			if (!srcEntry.isFile) continue;
-			if (srcEntry.name.extension != ".vx") continue;
 
-			if (srcEntry.name.baseName == "main.vx")
+		void visitDir(string dir, Identifier parentId) {
+			foreach (DirEntry srcEntry; dirEntries(dir, SpanMode.shallow, false))
 			{
-				if (foundMainFile) {
-					stderr.writeln("Plugin %s has multiple main.vx files:", info.name);
-					stderr.writeln("- ", srcEntry.name);
-					stderr.writeln("- ", info.mainFile);
-					assert(false);
+				Identifier entryId = driver.context.idMap.getOrReg(&driver.context, srcEntry.name.baseName.stripExtension);
+				Identifier fullEntryId = driver.context.idMap.getOrRegFqn(&driver.context, FullyQualifiedName(parentId, entryId));
+
+				if (srcEntry.isDir) {
+					visitDir(srcEntry.name, fullEntryId);
+					continue;
 				}
 
-				foundMainFile = true;
-				info.mainFile = srcEntry.name;
-			}
+				if (!srcEntry.isFile) continue;
+				if (srcEntry.name.extension != ".vx") continue;
 
-			//writeln("-s ", srcEntry.name);
-			info.sourceFiles ~= srcEntry.name;
+				if (srcEntry.name.baseName == "main.vx")
+				{
+					if (foundMainFile) {
+						stderr.writeln("Plugin %s has multiple main.vx files:", info.name);
+						stderr.writeln("- ", srcEntry.name);
+						stderr.writeln("- ", info.mainFile);
+						assert(false);
+					}
+
+					foundMainFile = true;
+					info.mainModule = fullEntryId;
+					info.mainFile = srcEntry.name;
+				}
+
+				//writeln("-s ", srcEntry.name);
+				info.sourceFiles ~= srcEntry.name;
+			}
 		}
+
+		visitDir(srcDir, Identifier());
 	}
 
 	void onPluginDir(string dir)
@@ -164,7 +187,7 @@ void registerPackages(ref Driver driver, string rootPluginName)
 			if (entry.isDir) {
 				switch(base) {
 					case "src":
-						onPluginSrcDir(info, entry.name);
+						onPluginSrcDir(driver, info, entry.name);
 						break;
 					case "res":
 						//writefln("-d res");
@@ -279,6 +302,13 @@ void registerPackages(ref Driver driver, string rootPluginName)
 	//stderr.writefln("Detected %s plugins in ../plugins", detectedPlugins.length);
 	//stderr.writefln("Selected %s plugins starting from %s", selectedPlugins.length, rootPluginName);
 	//stderr.writefln("Loaded %s source files", numSourceFilesLoaded);
+
+	if (!loadedMainFile) {
+		stderr.writeln("Cannot find main.vx");
+		return Identifier();
+	}
+
+	return detectedPlugins[mainPlugin].mainModule;
 }
 
 void registerHostSymbols(CompilationContext* context)
@@ -286,17 +316,17 @@ void registerHostSymbols(CompilationContext* context)
 	void regHostSymbol(alias member)(string symName, Identifier modId, LinkIndex hostModuleIndex)
 	{
 		//writefln("reg %s %s", hostModuleName, symName);
-		Identifier symId = context.idMap.getOrRegNoDup(context, symName);
+		Identifier symId = context.idMap.getOrReg(context, symName);
 		static if (isFunction!member) { // pickup functions
-			context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)&member);
+			context.addHostSymbol(hostModuleIndex, symId, cast(void*)&member);
 		} else static if (isFunctionPointer!member && !isType!member) { // pickup function pointers
-			context.addHostSymbol(hostModuleIndex, ExternalSymbolId(modId, symId), cast(void*)member);
+			context.addHostSymbol(hostModuleIndex, symId, cast(void*)member);
 		}
 	}
 
 	void regHostModule(alias Module)(string hostModuleName)
 	{
-		Identifier modId = context.idMap.getOrRegNoDup(context, hostModuleName);
+		Identifier modId = context.idMap.getOrReg(context, hostModuleName);
 		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
 
 		foreach(m; __traits(allMembers, Module))
@@ -330,7 +360,7 @@ void registerHostSymbols(CompilationContext* context)
 
 	// host
 	{
-		Identifier modId = context.idMap.getOrRegNoDup(context, "host");
+		Identifier modId = context.idMap.getOrReg(context, "host");
 		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
 		regHostSymbol!host_print("host_print", modId, hostModuleIndex);
 		regHostSymbol!(sin!float)("sin_f32", modId, hostModuleIndex);
