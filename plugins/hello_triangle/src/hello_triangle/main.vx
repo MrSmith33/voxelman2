@@ -146,7 +146,7 @@ struct Client
 
 	bool isRunning = true;
 
-	Error init()
+	Status init()
 	{
 		@static auto zone = TracyLoc(null, "Client.init", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -164,8 +164,8 @@ struct Client
 		indicies[4] = 3;
 		indicies[5] = 0;
 
-		if (initWindow()) return Error.yes;
-		if (initVulkan()) return Error.yes;
+		if (initWindow() != OK) return Status.ERR;
+		if (initVulkan() != OK) return Status.ERR;
 
 		@static auto zone1 = TracyLoc(null, "enet_initialize", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
 		enet_initialize();
@@ -187,10 +187,10 @@ struct Client
 
 		tracy_emit_zone_end(ctx);
 
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error initWindow()
+	Status initWindow()
 	{
 		@static auto zone1 = TracyLoc(null, "Client.initWindow", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone1, TRACY_ON);
 
@@ -199,7 +199,7 @@ struct Client
 			println("GLFW init failed");
 			tracy_emit_zone_end(ctx_glfwInit);
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx_glfwInit);
 
@@ -226,7 +226,7 @@ struct Client
 
 		tracy_emit_zone_end(ctx);
 
-		return Error.no;
+		return Status.OK;
 	}
 
 	@static void glfw_key_callback(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods)
@@ -241,43 +241,43 @@ struct Client
 		client.onFramebufferResize(width, height);
 	}
 
-	Error initVulkan()
+	Status initVulkan()
 	{
 		@static auto zone = TracyLoc(null, "Client.initVulkan", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		if (!glfwVulkanSupported) {
 			println("Vulkan is not supported");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		auto vkGetInstanceProcAddr = cast(PFN_vkGetInstanceProcAddr)glfwGetInstanceProcAddress(null, "vkGetInstanceProcAddr");
 		loadGlobalLevelFunctions(vkGetInstanceProcAddr);
 
-		if (createInstance()) return Error.yes;
-		if (setupDebugMessenger()) return Error.yes;
-		if (createSurface()) return Error.yes;
-		if (pickPhysicalDevice()) return Error.yes;
-		if (createLogicalDevice()) return Error.yes;
-		if (createAllocator(vkGetInstanceProcAddr)) return Error.yes;
-		if (createSwapChain(null)) return Error.yes;
-		if (createImageViews()) return Error.yes;
-		if (createRenderPass()) return Error.yes;
-		if (loadShaders()) return Error.yes;
-		if (createDescriptorSetLayout()) return Error.yes;
-		if (createGraphicsPipeline()) return Error.yes;
-		if (createFramebuffers()) return Error.yes;
-		if (createCommandPool()) return Error.yes;
-		if (createVertexBuffer()) return Error.yes;
-		if (createIndexBuffer()) return Error.yes;
-		if (createUniformBuffers()) return Error.yes;
-		if (createDescriptorPool()) return Error.yes;
-		if (createDescriptorSets()) return Error.yes;
-		if (createCommandBuffers()) return Error.yes;
-		if (createSyncObjects()) return Error.yes;
+		if (createInstance() != OK) return Status.ERR;
+		if (setupDebugMessenger() != OK) return Status.ERR;
+		if (createSurface() != OK) return Status.ERR;
+		if (pickPhysicalDevice() != OK) return Status.ERR;
+		if (createLogicalDevice() != OK) return Status.ERR;
+		if (createAllocator(vkGetInstanceProcAddr) != OK) return Status.ERR;
+		if (createSwapChain(null) != OK) return Status.ERR;
+		if (createImageViews() != OK) return Status.ERR;
+		if (createRenderPass() != OK) return Status.ERR;
+		if (loadShaders() != OK) return Status.ERR;
+		if (createDescriptorSetLayout() != OK) return Status.ERR;
+		if (createGraphicsPipeline() != OK) return Status.ERR;
+		if (createFramebuffers() != OK) return Status.ERR;
+		if (createCommandPool() != OK) return Status.ERR;
+		if (createVertexBuffer() != OK) return Status.ERR;
+		if (createIndexBuffer() != OK) return Status.ERR;
+		if (createUniformBuffers() != OK) return Status.ERR;
+		if (createDescriptorPool() != OK) return Status.ERR;
+		if (createDescriptorSets() != OK) return Status.ERR;
+		if (createCommandBuffers() != OK) return Status.ERR;
+		if (createSyncObjects() != OK) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
 
-		return Error.no;
+		return Status.OK;
 	}
 
 	void mainLoop()
@@ -285,7 +285,7 @@ struct Client
 		while(isRunning && !glfwWindowShouldClose(window)) {
 			f64 time = glfwGetTime();
 			update();
-			Error err = drawFrame(cast(f32)time);
+			Status err = drawFrame(cast(f32)time);
 			if (err) isRunning = false;
 			tracy_emit_frame_mark();
 		}
@@ -384,7 +384,7 @@ struct Client
 		}
 	}
 
-	Error recreateSwapChain() {
+	Status recreateSwapChain() {
 		@static auto zone = TracyLoc(null, "Client.recreateSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		// Pause if window was minimized
 		i32 width;
@@ -411,20 +411,20 @@ struct Client
 		if (oldSwapchain)
 			vkDestroySwapchainKHR(vkcontext.device, oldSwapchain, null);
 
-		if (createImageViews()) return Error.yes;
-		if (createRenderPass()) return Error.yes;
-		if (createGraphicsPipeline()) return Error.yes;
-		if (createFramebuffers()) return Error.yes;
-		if (createUniformBuffers()) return Error.yes;
-		if (createDescriptorPool()) return Error.yes;
-		if (createDescriptorSets()) return Error.yes;
-		if (createCommandBuffers()) return Error.yes;
+		if (createImageViews() != OK) return Status.ERR;
+		if (createRenderPass() != OK) return Status.ERR;
+		if (createGraphicsPipeline() != OK) return Status.ERR;
+		if (createFramebuffers() != OK) return Status.ERR;
+		if (createUniformBuffers() != OK) return Status.ERR;
+		if (createDescriptorPool() != OK) return Status.ERR;
+		if (createDescriptorSets() != OK) return Status.ERR;
+		if (createCommandBuffers() != OK) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createInstance()
+	Status createInstance()
 	{
 		@static auto zone = TracyLoc(null, "Client.createInstance", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -472,7 +472,7 @@ struct Client
 		if (vkCreateInstanceResult != VK_SUCCESS) {
 			println("vkCreateInstance failed: ", vkCreateInstanceResult);
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 		//println("VkInstance ", cast(void*)instance);
 
@@ -493,7 +493,7 @@ struct Client
 		//}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
 	void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT* createInfo) {
@@ -504,7 +504,7 @@ struct Client
 		createInfo.pUserData = null; // Optional
 	}
 
-	Error createAllocator(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
+	Status createAllocator(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
 	{
 		VmaVulkanFunctions vulkanFunctions;
 		vulkanFunctions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
@@ -518,15 +518,15 @@ struct Client
 		allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
 
 		vmaCreateAllocator(&allocatorCreateInfo, &vkcontext.vkallocator);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error setupDebugMessenger() {
+	Status setupDebugMessenger() {
 		@static auto zone = TracyLoc(null, "Client.setupDebugMessenger", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		if (!enableValidationLayers) {
 			tracy_emit_zone_end(ctx);
-			return Error.no;
+			return Status.OK;
 		}
 
 		VkDebugUtilsMessengerCreateInfoEXT createInfo;
@@ -535,24 +535,24 @@ struct Client
 		if (vkCreateDebugUtilsMessengerEXT(vkcontext.instance, &createInfo, null, &debugMessenger) != VK_SUCCESS) {
 			println("failed to set up debug messenger!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createSurface() {
+	Status createSurface() {
 		@static auto zone = TracyLoc(null, "Client.createSurface", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		if (glfwCreateWindowSurface(vkcontext.instance, window, null, &vkcontext.swapchain.surface) != VK_SUCCESS) {
 			println("failed to create window surface!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
 	bool checkValidationLayerSupport() {
@@ -587,7 +587,7 @@ struct Client
 		return extensions;
 	}
 
-	Error pickPhysicalDevice() {
+	Status pickPhysicalDevice() {
 		@static auto zone = TracyLoc(null, "Client.pickPhysicalDevice", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		u32 deviceCount = 0;
@@ -596,7 +596,7 @@ struct Client
 		if (deviceCount == 0) {
 			println("failed to find GPUs with Vulkan support!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		VkPhysicalDevice[] devices = makeArray[VkPhysicalDevice](deviceCount);
@@ -621,13 +621,13 @@ struct Client
 		if (vkcontext.physicalDevice == null) {
 			println("failed to find a suitable GPU!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		//println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
 	// negative score means that device is unsuitable
@@ -720,7 +720,7 @@ struct Client
 		return hasAllExtensions;
 	}
 
-	Error createLogicalDevice() {
+	Status createLogicalDevice() {
 		@static auto zone = TracyLoc(null, "Client.createLogicalDevice", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		QueueFamilyIndices indices = findQueueFamilies(vkcontext.physicalDevice);
@@ -778,7 +778,7 @@ struct Client
 		if (vkCreateDeviceResult != VK_SUCCESS) {
 			println("failed to create logical device: ");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 		//println("Logical device ", device);
 
@@ -795,10 +795,10 @@ struct Client
 		vkGetDeviceQueue(vkcontext.device, indices.indices[QueueFamily.present],  0, &vkcontext.presentQueue);
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createSwapChain(VkSwapchainKHR oldSwapchain) {
+	Status createSwapChain(VkSwapchainKHR oldSwapchain) {
 		@static auto zone = TracyLoc(null, "Client.createSwapChain", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(vkcontext.swapchainSupport.formats);
@@ -844,7 +844,7 @@ struct Client
 			println("failed to create swap chain!");
 			tracy_emit_zone_end(ctx_vkCreateSwapchainKHR);
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx_vkCreateSwapchainKHR);
 
@@ -860,10 +860,10 @@ struct Client
 		vkcontext.swapchainSupport.free();
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createImageViews() {
+	Status createImageViews() {
 		@static auto zone = TracyLoc(null, "Client.createImageViews", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		for (u32 i = 0; i < vkcontext.swapchain.numImages; ++i) {
@@ -884,14 +884,14 @@ struct Client
 			if (vkCreateImageView(vkcontext.device, &createInfo, null, &vkcontext.swapchain.images[i].imageView) != VK_SUCCESS) {
 				println("failed to create image views!");
 				tracy_emit_zone_end(ctx);
-				return Error.yes;
+				return Status.ERR;
 			}
 		}
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createRenderPass() {
+	Status createRenderPass() {
 		@static auto zone = TracyLoc(null, "Client.createRenderPass", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkAttachmentDescription colorAttachment;
@@ -932,14 +932,14 @@ struct Client
 		if (vkCreateRenderPass(vkcontext.device, &renderPassInfo, null, &vkcontext.swapchain.renderPass) != VK_SUCCESS) {
 			println("failed to create render pass!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createDescriptorSetLayout() {
+	Status createDescriptorSetLayout() {
 		@static auto zone = TracyLoc(null, "Client.createDescriptorSetLayout", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkDescriptorSetLayoutBinding uboLayoutBinding;
@@ -956,30 +956,30 @@ struct Client
 		if (vkCreateDescriptorSetLayout(vkcontext.device, &layoutInfo, null, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
 			println("failed to create descriptor set layout!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error loadShaders() {
+	Status loadShaders() {
 		@static auto zone = TracyLoc(null, "Client.loadShaders", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		@static auto zone1 = TracyLoc("vertShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
 		u8[] vertShaderSource;
-		Error err1 = readFile("../plugins/hello_triangle/res/shader.vert", &vertShaderSource);
+		Status err1 = readFile("../plugins/hello_triangle/res/shader.vert", &vertShaderSource);
 		tracy_emit_zone_end(ctx1);
 		@static auto zone2 = TracyLoc("fragShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx2 = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		u8[] fragShaderSource;
-		Error err2 = readFile("../plugins/hello_triangle/res/shader.frag", &fragShaderSource);
+		Status err2 = readFile("../plugins/hello_triangle/res/shader.frag", &fragShaderSource);
 		tracy_emit_zone_end(ctx2);
 
 		shaderc_compiler_t compiler = shaderc_compiler_initialize();
 		u8[] vertShaderCode;
 		u8[] fragShaderCode;
-		Error err3 = compileShader(&vertShaderCode, compiler, vertShaderSource, "shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
-		Error err4 = compileShader(&fragShaderCode, compiler, fragShaderSource, "shader.frag", "main", shaderc_shader_kind.shaderc_glsl_fragment_shader);
+		Status err3 = compileShader(&vertShaderCode, compiler, vertShaderSource, "shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
+		Status err4 = compileShader(&fragShaderCode, compiler, fragShaderSource, "shader.frag", "main", shaderc_shader_kind.shaderc_glsl_fragment_shader);
 
 		@static auto zone3 = TracyLoc(null, "shaderc_compiler_release", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx3 = tracy_emit_zone_begin(&zone3, TRACY_ON);
 		shaderc_compiler_release(compiler);
@@ -992,10 +992,10 @@ struct Client
 		freeArray[u8](fragShaderCode);
 
 		tracy_emit_zone_end(ctx);
-		return cast(Error)(err1 || err2 || err3 || err4);
+		return cast(Status)(err1 || err2 || err3 || err4);
 	}
 
-	Error createGraphicsPipeline() {
+	Status createGraphicsPipeline() {
 		@static auto zone = TracyLoc(null, "Client.createGraphicsPipeline", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo;
@@ -1082,7 +1082,7 @@ struct Client
 		@static auto zone4 = TracyLoc(null, "vkCreatePipelineLayout", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx4 = tracy_emit_zone_begin(&zone4, TRACY_ON);
 		if (vkCreatePipelineLayout(vkcontext.device, &pipelineLayoutInfo, null, &pipeline.pipelineLayout) != VK_SUCCESS) {
 			println("failed to create pipeline layout!");
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx4);
 
@@ -1104,15 +1104,15 @@ struct Client
 		@static auto zone5 = TracyLoc(null, "vkCreatePipelineLayout", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx5 = tracy_emit_zone_begin(&zone5, TRACY_ON);
 		if (vkCreateGraphicsPipelines(vkcontext.device, null, 1, &pipelineInfo, null, &pipeline.graphicsPipeline) != VK_SUCCESS) {
 			println("failed to create graphics pipeline!");
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx5);
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createFramebuffers() {
+	Status createFramebuffers() {
 		@static auto zone = TracyLoc(null, "Client.createFramebuffers", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		for (u64 i = 0; i < vkcontext.swapchain.numImages; i++) {
@@ -1129,15 +1129,15 @@ struct Client
 
 			if (vkCreateFramebuffer(vkcontext.device, &framebufferInfo, null, &vkcontext.swapchain.images[i].framebuffer) != VK_SUCCESS) {
 				println("failed to create framebuffer!");
-				return Error.yes;
+				return Status.ERR;
 			}
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createCommandPool() {
+	Status createCommandPool() {
 		@static auto zone = TracyLoc(null, "Client.createCommandPool", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		QueueFamilyIndices queueFamilyIndices = findQueueFamilies(vkcontext.physicalDevice);
@@ -1148,14 +1148,14 @@ struct Client
 
 		if (vkCreateCommandPool(vkcontext.device, &poolInfo, null, &vkcontext.commandPool) != VK_SUCCESS) {
 			println("failed to create command pool!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createVertexBuffer() {
+	Status createVertexBuffer() {
 		@static auto zone = TracyLoc(null, "Client.createVertexBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkDeviceSize bufferSize = vertices.sizeof;
@@ -1178,10 +1178,10 @@ struct Client
 		vkFreeMemory(vkcontext.device, stagingBufferMemory, null);
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createIndexBuffer() {
+	Status createIndexBuffer() {
 		VkDeviceSize bufferSize = indicies.sizeof;
 
 		VkBuffer stagingBuffer;
@@ -1200,10 +1200,10 @@ struct Client
 
 		vkDestroyBuffer(vkcontext.device, stagingBuffer, null);
 		vkFreeMemory(vkcontext.device, stagingBufferMemory, null);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createUniformBuffers() {
+	Status createUniformBuffers() {
 		VkDeviceSize bufferSize = UniformBufferObject.sizeof;
 
 		uniformBuffers = resizeArray[VkBuffer](uniformBuffers, vkcontext.NUM_FRAMES);
@@ -1212,10 +1212,10 @@ struct Client
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
 			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i], &uniformBuffersMemory[i]);
 		}
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createDescriptorPool() {
+	Status createDescriptorPool() {
 		VkDescriptorPoolSize poolSize;
 		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		poolSize.descriptorCount = vkcontext.NUM_FRAMES;
@@ -1227,12 +1227,12 @@ struct Client
 
 		if (vkCreateDescriptorPool(vkcontext.device, &poolInfo, null, &vkcontext.descriptorPool) != VK_SUCCESS) {
 			println("failed to create descriptor pool!");
-			return Error.yes;
+			return Status.ERR;
 		}
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createDescriptorSets() {
+	Status createDescriptorSets() {
 		VkDescriptorSetLayout[vkcontext.NUM_FRAMES] layouts;
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) layouts[i] = pipeline.descriptorSetLayout;
 
@@ -1244,7 +1244,7 @@ struct Client
 		VkDescriptorSet[vkcontext.NUM_FRAMES] descriptorSets;
 		if (vkAllocateDescriptorSets(vkcontext.device, &allocInfo, descriptorSets.ptr) != VK_SUCCESS) {
 			println("failed to allocate descriptor sets!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
@@ -1265,10 +1265,10 @@ struct Client
 
 			vkUpdateDescriptorSets(vkcontext.device, 1, &descriptorWrite, 0, null);
 		}
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
+	Status createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
 		@static auto zone = TracyLoc(null, "Client.createBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkBufferCreateInfo bufferInfo;
@@ -1278,7 +1278,7 @@ struct Client
 
 		if (vkCreateBuffer(vkcontext.device, &bufferInfo, null, buffer) != VK_SUCCESS) {
 			println("failed to create buffer!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		VkMemoryRequirements memRequirements;
@@ -1286,17 +1286,17 @@ struct Client
 
 		VkMemoryAllocateInfo allocInfo;
 		allocInfo.allocationSize = memRequirements.size;
-		if (findMemoryType(memRequirements.memoryTypeBits, properties, &allocInfo.memoryTypeIndex)) return Error.yes;
+		if (findMemoryType(memRequirements.memoryTypeBits, properties, &allocInfo.memoryTypeIndex)) return Status.ERR;
 
 		if (vkAllocateMemory(vkcontext.device, &allocInfo, null, bufferMemory) != VK_SUCCESS) {
 			println("failed to allocate buffer memory!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		vkBindBufferMemory(vkcontext.device, *buffer, *bufferMemory, 0);
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
 	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
@@ -1331,22 +1331,22 @@ struct Client
 		vkFreeCommandBuffers(vkcontext.device, vkcontext.commandPool, 1, &commandBuffer);
 	}
 
-	Error findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties, u32* memType) {
+	Status findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties, u32* memType) {
 		VkPhysicalDeviceMemoryProperties memProperties;
 		vkGetPhysicalDeviceMemoryProperties(vkcontext.physicalDevice, &memProperties);
 
 		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
 			if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 				*memType = i;
-				return Error.no;
+				return Status.OK;
 			}
 		}
 
 		println("failed to find suitable memory type!");
-		return Error.yes;
+		return Status.ERR;
 	}
 
-	Error createCommandBuffers() {
+	Status createCommandBuffers() {
 		@static auto zone = TracyLoc(null, "Client.createCommandBuffers", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkCommandBuffer[vkcontext.NUM_FRAMES] commandBuffers;
@@ -1359,23 +1359,23 @@ struct Client
 		if (vkAllocateCommandBuffers(vkcontext.device, &allocInfo, commandBuffers.ptr) != VK_SUCCESS) {
 			println("failed to allocate command buffers!");
 			tracy_emit_zone_end(ctx);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		for (u32 i; i < vkcontext.NUM_FRAMES; ++i) vkcontext.frames[i].commandBuffer = commandBuffers[i];
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error recordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex, FrameData* frame) {
+	Status recordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex, FrameData* frame) {
 		@static auto zone = TracyLoc(null, "Client.recordCommandBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkCommandBufferBeginInfo beginInfo;
 
 		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
 			println("failed to begin recording command buffer!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		VkRenderPassBeginInfo renderPassInfo;
@@ -1409,14 +1409,14 @@ struct Client
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
 			println("failed to record command buffer!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error createSyncObjects() {
+	Status createSyncObjects() {
 		@static auto zone = TracyLoc(null, "Client.createSyncObjects", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkSemaphoreCreateInfo semaphoreInfo;
@@ -1430,12 +1430,12 @@ struct Client
 				vkCreateSemaphore(vkcontext.device, &semaphoreInfo, null, &frame.renderFinishedSemaphore) != VK_SUCCESS ||
 				vkCreateFence(vkcontext.device, &fenceInfo, null, &frame.inFlightFence) != VK_SUCCESS) {
 				println("failed to create synchronization objects for a frame!");
-				return Error.yes;
+				return Status.ERR;
 			}
 		}
 
 		tracy_emit_zone_end(ctx);
-		return Error.no;
+		return Status.OK;
 	}
 
 	void updateUniformBuffer(f32 time) {
@@ -1450,7 +1450,7 @@ struct Client
 		vkUnmapMemory(vkcontext.device, uniformBuffersMemory[vkcontext.frameIndex]);
 	}
 
-	Error drawFrame(f32 time) {
+	Status drawFrame(f32 time) {
 		@static auto zone = TracyLoc(null, "Client.drawFrame", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		auto frame = &vkcontext.frames[vkcontext.frameIndex];
@@ -1467,10 +1467,10 @@ struct Client
 		@static auto zone2 = TracyLoc(null, "vkAcquireNextImageKHR", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx2 = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		VkResult result = vkAcquireNextImageKHR(vkcontext.device, vkcontext.swapchain.swapchain, u64.max, frame.imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-			if (recreateSwapChain()) return Error.yes;
+			if (recreateSwapChain() != OK) return Status.ERR;
 		} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 			println("failed to acquire swap chain image!");
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx2);
 
@@ -1497,7 +1497,7 @@ struct Client
 		@static auto zone5 = TracyLoc(null, "vkQueueSubmit", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx5 = tracy_emit_zone_begin(&zone5, TRACY_ON);
 		if (vkQueueSubmit(vkcontext.graphicsQueue, 1, &submitInfo, frame.inFlightFence) != VK_SUCCESS) {
 			println("failed to submit draw command buffer!");
-			return Error.yes;
+			return Status.ERR;
 		}
 		tracy_emit_zone_end(ctx5);
 
@@ -1517,20 +1517,20 @@ struct Client
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
 			//println("recreateSwapChain ", result == VK_ERROR_OUT_OF_DATE_KHR, " ", result == VK_SUBOPTIMAL_KHR, " ", framebufferResized);
-			recreateSwapChain();
+			if (recreateSwapChain() != OK) return Status.ERR;
 		} else if (result != VK_SUCCESS) {
 			println("failed to present swap chain image!");
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		vkcontext.frameIndex = (vkcontext.frameIndex + 1) % vkcontext.NUM_FRAMES;
 
 		tracy_emit_zone_end(ctx);
 
-		return Error.no;
+		return Status.OK;
 	}
 
-	Error compileShader(u8[]* outData, shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {
+	Status compileShader(u8[]* outData, shaderc_compiler_t compiler, u8[] source, u8[] filename, u8* entryname, shaderc_shader_kind shader_kind) {
 		@static auto zone = TracyLoc(null, "Client.compileShader", "main.vx", cast(u32)__LINE__, 0xAAAA00); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		@static auto zone1 = TracyLoc(null, "shaderc_compile_into_spv", "main.vx", cast(u32)__LINE__, 0xAAAA00); auto ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
@@ -1549,7 +1549,7 @@ struct Client
 		if (numWarnings != 0 || numErrors != 0) {
 			u8* msg = shaderc_result_get_error_message(result);
 			print(msg.fromStringz);
-			return Error.yes;
+			return Status.ERR;
 		}
 
 		u64 resLength = shaderc_result_get_length(result);
@@ -1561,7 +1561,7 @@ struct Client
 
 		tracy_emit_zone_end(ctx);
 
-		return Error.no;
+		return Status.OK;
 	}
 
 	VkShaderModule createShaderModule(u8[] code) {

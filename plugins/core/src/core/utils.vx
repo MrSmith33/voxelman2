@@ -98,13 +98,15 @@ i32 abs(i32 a) #inline {
 	return a;
 }
 
-enum Error : bool {
-	no = false,
-	yes = true,
+enum Status : u8 {
+	OK = 0,
+	ERR = 1,
 }
+enum ERR = Status.ERR;
+enum OK = Status.OK;
 
 // TODO: almost no error handling being done here
-Error readFile(u8[] filename, u8[]* result) {
+Status readFile(u8[] filename, u8[]* result) {
 	void* hFile = CreateFileA(
 		filename.ptr,    // file to open
 		GENERIC_READ,    // open for reading
@@ -118,20 +120,20 @@ Error readFile(u8[] filename, u8[]* result) {
 		u8* message = getLastErrorMsg();
 		print("[ERROR] Failed to read `", filename, "` ", message.fromStringz);
 		freeLastErrorMsg(message);
-		return Error.yes;
+		return Status.ERR;
 	}
 
 	i64 size;
 	if (!GetFileSizeEx(hFile, &size))
 	{
 		CloseHandle(hFile);
-		return Error.yes; // error condition, could call GetLastError to find out more
+		return Status.ERR; // error condition, could call GetLastError to find out more
 	}
 
 
 	if (size == 0) {
 		CloseHandle(hFile);
-		return Error.yes; // empty file
+		return Status.ERR; // empty file
 	}
 
 	*result = makeVoidArray[u8](cast(u64)size);
@@ -144,10 +146,10 @@ Error readFile(u8[] filename, u8[]* result) {
 
 		freeArray[u8](*result);
 		CloseHandle(hFile);
-		return Error.yes; // error condition, could call GetLastError to find out more
+		return Status.ERR; // error condition, could call GetLastError to find out more
 	}
 	CloseHandle(hFile);
-	return Error.no;
+	return Status.OK;
 }
 
 u8* getLastErrorMsg() {
