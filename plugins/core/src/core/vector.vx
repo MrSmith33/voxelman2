@@ -22,6 +22,15 @@ vec3 cross_vec3(vec3 a, vec3 b) {
 	);
 }
 
+vec3 add_vec3(vec3 a, vec3 b) {
+	return vec3
+	(
+		a.x + b.x,
+		a.y + b.y,
+		a.z + b.z,
+	);
+}
+
 vec3 sub_vec3(vec3 a, vec3 b) {
 	return vec3
 	(

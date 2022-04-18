@@ -233,6 +233,8 @@ struct Array[T]
 	u32 length;
 	u32 capacity;
 
+	u64 byteLength() { return length * T.sizeof; }
+
 	void free()
 	{
 		mi_free(ptr);
@@ -279,7 +281,7 @@ struct Array[T]
 
 	T* putVoid(u32 numItems)
 	{
-		if (length == capacity) extend(numItems);
+		if (length + numItems > capacity) extend(numItems);
 		T* result = &ptr[length];
 		length += numItems;
 		return result;

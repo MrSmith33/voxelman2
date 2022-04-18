@@ -45,12 +45,16 @@ struct VkContext {
 	SwapchainSupportDetails swapchainSupport; // result of querySwapChainSupport on physicalDevice
 	VkDevice device; // logical device
 
+	VkPhysicalDeviceMemoryProperties memProperties; // cached
+
 	VkQueue graphicsQueue;
 	VkQueue presentQueue;
 
 	VkCommandPool commandPool;
 	VkDescriptorPool descriptorPool;
+
 	VkFence uploadFence;
+	VkCommandBuffer uploadCommandBuffer;
 
 	enum u32 NUM_FRAMES = 2;
 	u32 frameIndex; // 0, 1
@@ -73,10 +77,10 @@ struct Swapchain {
 	u32 imageIndex; // (0 <= imageIndex < numImages)
 
 	VkSwapchainKHR swapchain;
-	VkSurfaceKHR surface;
-	VkFormat swapchainImageFormat;
-	VkExtent2D swapchainExtent;
-	VkRenderPass renderPass;
+	VkSurfaceKHR   surface;
+	VkFormat       swapchainImageFormat;
+	VkExtent2D     swapchainExtent;
+	VkRenderPass   renderPass;
 
 	SwapchainImage[MAX_IMAGES] images;
 }
@@ -84,10 +88,14 @@ struct Swapchain {
 struct FrameData {
 	VkSemaphore imageAvailableSemaphore;
 	VkSemaphore renderFinishedSemaphore;
-	VkFence inFlightFence;
+	VkFence     inFlightFence;
 
 	VkCommandBuffer commandBuffer;
 	VkDescriptorSet descriptorSet;
+
+	BarBuffer vertexBuffer;
+	BarBuffer indexBuffer;
+	BarBuffer uniformBuffer;
 }
 
 struct Pipeline {
@@ -96,7 +104,12 @@ struct Pipeline {
 	VkPipeline graphicsPipeline;
 }
 
-
+// Single buffer for single frame stored in BAR memory
+struct BarBuffer {
+	VkDeviceSize        size;
+	VkBuffer          buffer;
+	VmaAllocation allocation;
+}
 
 struct Client
 {
@@ -134,36 +147,37 @@ struct Client
 	u8*[1] validationLayers;
 	u8*[1] deviceExtensions;
 
-	Vertex[4] vertices;
-	u16[6] indicies;
-
-	VkBuffer vertexBuffer;
-	VkDeviceMemory vertexBufferMemory;
-	VkBuffer indexBuffer;
-	VkDeviceMemory indexBufferMemory;
-
-	VkBuffer[] uniformBuffers;
-	VkDeviceMemory[] uniformBuffersMemory;
+	Array[Vertex] vertices;
+	Array[u16] indicies;
 
 	bool isRunning = true;
+
+	void putQuadAt(vec3 pos) {
+		u16 ind = cast(u16)vertices.length;
+
+		Vertex* v = vertices.putVoid(4);
+		u16* i = indicies.putVoid(6);
+
+		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), vec3(1, 0, 0));
+		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), vec3(0, 1, 0));
+		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), vec3(0, 0, 1));
+		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), vec3(1, 1, 1));
+		i[0] = ind + 0;
+		i[1] = ind + 1;
+		i[2] = ind + 2;
+		i[3] = ind + 2;
+		i[4] = ind + 3;
+		i[5] = ind + 0;
+	}
 
 	Status init()
 	{
 		@static auto zone = TracyLoc(null, "Client.init", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
+		putQuadAt(vec3(0,0,0));
+
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
-
-		vertices[0] = Vertex(vec3(-0.5, -0.5, 0), vec3(1, 0, 0));
-		vertices[1] = Vertex(vec3( 0.5, -0.5, 0), vec3(0, 1, 0));
-		vertices[2] = Vertex(vec3( 0.5,  0.5, 0), vec3(0, 0, 1));
-		vertices[3] = Vertex(vec3(-0.5,  0.5, 0), vec3(1, 1, 1));
-		indicies[0] = 0;
-		indicies[1] = 1;
-		indicies[2] = 2;
-		indicies[3] = 2;
-		indicies[4] = 3;
-		indicies[5] = 0;
 
 		if (initWindow() != OK) return Status.ERR;
 		if (initVulkan() != OK) return Status.ERR;
@@ -219,6 +233,7 @@ struct Client
 
 		@static auto zone6 = TracyLoc(null, "glfwSetKeyCallback", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetKeyCallback = tracy_emit_zone_begin(&zone6, TRACY_ON);
 		glfwSetKeyCallback(window, &glfw_key_callback);
+		glfwSetMouseButtonCallback(window, &glfw_mouse_button_callback);
 		tracy_emit_zone_end(ctx_glfwSetKeyCallback);
 
 		@static auto zone7 = TracyLoc(null, "glfwSetFramebufferSizeCallback", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetFBCallback = tracy_emit_zone_begin(&zone7, TRACY_ON);
@@ -234,6 +249,21 @@ struct Client
 	{
 		Client* client = cast(Client*)glfwGetWindowUserPointer(window);
 		client.onKey(key, scancode, action, mods);
+	}
+
+	@static void glfw_mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+	{
+		Client* client = cast(Client*)glfwGetWindowUserPointer(window);
+		f64 xpos;
+		f64 ypos;
+		glfwGetCursorPos(window, &xpos, &ypos);
+		i32 width;
+		i32 height;
+		glfwGetFramebufferSize(window, &width, &height);
+		if (width == 0 || height == 0) return;
+		f32 x = cast(f32)xpos/width;
+		f32 y = cast(f32)ypos/height;
+		client.onMouseClick(button, action, mods, x, y);
 	}
 
 	@static void glfw_framebuffer_resize_callback(GLFWwindow* window, i32 width, i32 height)
@@ -269,12 +299,10 @@ struct Client
 		if (createGraphicsPipeline() != OK) return Status.ERR;
 		if (createFramebuffers() != OK) return Status.ERR;
 		if (createCommandPool() != OK) return Status.ERR;
-		if (createVertexBuffer() != OK) return Status.ERR;
-		if (createIndexBuffer() != OK) return Status.ERR;
+		if (createCommandBuffers() != OK) return Status.ERR;
 		if (createUniformBuffers() != OK) return Status.ERR;
 		if (createDescriptorPool() != OK) return Status.ERR;
 		if (createDescriptorSets() != OK) return Status.ERR;
-		if (createCommandBuffers() != OK) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
 
@@ -299,9 +327,6 @@ struct Client
 		@static auto zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
 		glfwPollEvents();
 		tracy_emit_zone_end(tracy_ctx1);
-		//@static auto zone_loc2 = TracyLoc(null, "sleep(1)", "main.vx", cast(u32)__LINE__, 0x00CC00); TracyZoneCtx tracy_ctx2 = tracy_emit_zone_begin(&zone_loc2, TRACY_ON);
-		//Sleep(1);
-		//tracy_emit_zone_end(tracy_ctx2);
 	}
 
 	void free()
@@ -320,34 +345,34 @@ struct Client
 	{
 		@static auto zone = TracyLoc(null, "Client.freeVulkan", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
-		vmaDestroyAllocator(vkcontext.vkallocator);
-
 		vkcontext.swapchainSupport.free();
 
 		vkDestroyShaderModule(vkcontext.device, vertShaderModule, null);
 		vkDestroyShaderModule(vkcontext.device, fragShaderModule, null);
 
 		cleanupSwapChain();
-
 		vkDestroySwapchainKHR(vkcontext.device, vkcontext.swapchain.swapchain, null);
 
+		vkDestroyDescriptorPool(vkcontext.device, vkcontext.descriptorPool, null);
 		vkDestroyDescriptorSetLayout(vkcontext.device, pipeline.descriptorSetLayout, null);
 
-		vkDestroyBuffer(vkcontext.device, indexBuffer, null);
-		vkFreeMemory(vkcontext.device, indexBufferMemory, null);
-
-		vkDestroyBuffer(vkcontext.device, vertexBuffer, null);
-		vkFreeMemory(vkcontext.device, vertexBufferMemory, null);
-
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
+			auto frame = &vkcontext.frames[i];
 			vkDestroySemaphore(vkcontext.device, vkcontext.frames[i].renderFinishedSemaphore, null);
 			vkDestroySemaphore(vkcontext.device, vkcontext.frames[i].imageAvailableSemaphore, null);
 			vkDestroyFence(vkcontext.device, vkcontext.frames[i].inFlightFence, null);
+
+			freeBarBuffer(&frame.vertexBuffer);
+			freeBarBuffer(&frame.indexBuffer);
+			freeBarBuffer(&frame.uniformBuffer);
 		}
 
 		vkDestroyFence(vkcontext.device, vkcontext.uploadFence, null);
 
 		vkDestroyCommandPool(vkcontext.device, vkcontext.commandPool, null);
+
+		// all allocated memory must be freed before the deleting allocator
+		vmaDestroyAllocator(vkcontext.vkallocator);
 
 		vkDestroyDevice(vkcontext.device, null);
 
@@ -372,19 +397,19 @@ struct Client
 	}
 
 	void cleanupSwapChain() {
-		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
-			vkDestroyBuffer(vkcontext.device, uniformBuffers[i], null);
-			vkFreeMemory(vkcontext.device, uniformBuffersMemory[i], null);
-		}
-		vkDestroyDescriptorPool(vkcontext.device, vkcontext.descriptorPool, null);
-		vkDestroyPipeline(vkcontext.device, pipeline.graphicsPipeline, null);
-		vkDestroyPipelineLayout(vkcontext.device, pipeline.pipelineLayout, null);
-		vkDestroyRenderPass(vkcontext.device, vkcontext.swapchain.renderPass, null);
-
 		for (u64 i = 0; i < vkcontext.swapchain.numImages; ++i) {
 			vkDestroyFramebuffer(vkcontext.device, vkcontext.swapchain.images[i].framebuffer, null);
+			vkcontext.swapchain.images[i].framebuffer = null;
 			vkDestroyImageView(vkcontext.device, vkcontext.swapchain.images[i].imageView, null);
+			vkcontext.swapchain.images[i].imageView = null;
 		}
+
+		vkDestroyPipeline(vkcontext.device, pipeline.graphicsPipeline, null);
+		pipeline.graphicsPipeline = null;
+		vkDestroyPipelineLayout(vkcontext.device, pipeline.pipelineLayout, null);
+		pipeline.pipelineLayout = null;
+		vkDestroyRenderPass(vkcontext.device, vkcontext.swapchain.renderPass, null);
+		vkcontext.swapchain.renderPass = null;
 	}
 
 	Status recreateSwapChain() {
@@ -418,10 +443,6 @@ struct Client
 		if (createRenderPass() != OK) return Status.ERR;
 		if (createGraphicsPipeline() != OK) return Status.ERR;
 		if (createFramebuffers() != OK) return Status.ERR;
-		if (createUniformBuffers() != OK) return Status.ERR;
-		if (createDescriptorPool() != OK) return Status.ERR;
-		if (createDescriptorSets() != OK) return Status.ERR;
-		if (createCommandBuffers() != OK) return Status.ERR;
 
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
@@ -487,7 +508,7 @@ struct Client
 		//	u32 extensionCount;
 		//	vkEnumerateInstanceExtensionProperties(null, &extensionCount, null);
 		//	println("\n", extensionCount, " instance extensions supported");
-		//	VkExtensionProperties[] extensions = makeArray[VkExtensionProperties](extensionCount);
+		//	auto extensions = makeArray[VkExtensionProperties](extensionCount);
 		//	vkEnumerateInstanceExtensionProperties(null, &extensionCount, extensions.ptr);
 		//	for (i32 i; i < extensionCount; ++i) {
 		//		println("  ", extensions[i].extensionName.ptr.fromStringz, " ", extensions[i].specVersion);
@@ -563,7 +584,7 @@ struct Client
 
 		u32 layerCount;
 		vkEnumerateInstanceLayerProperties(&layerCount, null);
-		VkLayerProperties[] availableLayers = makeArray[VkLayerProperties](layerCount);
+		auto availableLayers = makeArray[VkLayerProperties](layerCount);
 		vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.ptr);
 		//println("\n", layerCount, " layers supported");
 
@@ -602,7 +623,7 @@ struct Client
 			return Status.ERR;
 		}
 
-		VkPhysicalDevice[] devices = makeArray[VkPhysicalDevice](deviceCount);
+		auto devices = makeArray[VkPhysicalDevice](deviceCount);
 		vkEnumeratePhysicalDevices(vkcontext.instance, &deviceCount, devices.ptr);
 
 		//println("Found ", deviceCount, " devices:");
@@ -629,8 +650,42 @@ struct Client
 
 		//println("Selected device ", physicalDevice, " with score ", bestDeviceScore);
 
+		// Fetch and cache memProperties
+		vkGetPhysicalDeviceMemoryProperties(vkcontext.physicalDevice, &vkcontext.memProperties);
+
+		//printMemoryProps();
+
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
+	}
+
+	void printMemoryProps() {
+		println("Memory types:");
+		for (u32 i; i < vkcontext.memProperties.memoryTypeCount; ++i) {
+			VkMemoryType memType = vkcontext.memProperties.memoryTypes[i];
+			print("- mem ", i, " heap ", memType.heapIndex);
+			printMemoryPropFlags(memType.propertyFlags);
+			println;
+		}
+		println("Heaps:");
+		for (u32 i; i < vkcontext.memProperties.memoryHeapCount; ++i) {
+			VkMemoryHeap memHeap = vkcontext.memProperties.memoryHeaps[i];
+			print("- heap ", i, " size ", memHeap.size);
+			if (memHeap.flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)   print(" DEVICE_LOCAL_BIT");
+			if (memHeap.flags & VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) print(" MULTI_INSTANCE_BIT");
+			println;
+		}
+	}
+
+	@static void printMemoryPropFlags(VkMemoryPropertyFlags f) {
+		if (f & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)        print(" DEVICE_LOCAL_BIT");
+		if (f & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)        print(" HOST_VISIBLE_BIT");
+		if (f & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)       print(" HOST_COHERENT_BIT");
+		if (f & VK_MEMORY_PROPERTY_HOST_CACHED_BIT)         print(" HOST_CACHED_BIT");
+		if (f & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT)    print(" LAZILY_ALLOCATED_BIT");
+		if (f & VK_MEMORY_PROPERTY_PROTECTED_BIT)           print(" PROTECTED_BIT");
+		if (f & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) print(" DEVICE_COHERENT_BIT_AMD");
+		if (f & VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD) print(" DEVICE_UNCACHED_BIT_AMD");
 	}
 
 	// negative score means that device is unsuitable
@@ -679,7 +734,7 @@ struct Client
 		u32 queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, null);
 
-		VkQueueFamilyProperties[] queueFamilies = makeArray[VkQueueFamilyProperties](queueFamilyCount);
+		auto queueFamilies = makeArray[VkQueueFamilyProperties](queueFamilyCount);
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.ptr);
 
 		for (u32 i; i < queueFamilyCount; ++i) {
@@ -707,7 +762,7 @@ struct Client
 		u32 extensionCount;
 		vkEnumerateDeviceExtensionProperties(device, null, &extensionCount, null);
 
-		VkExtensionProperties[] availableExtensions = makeArray[VkExtensionProperties](extensionCount);
+		auto availableExtensions = makeArray[VkExtensionProperties](extensionCount);
 		vkEnumerateDeviceExtensionProperties(device, null, &extensionCount, availableExtensions.ptr);
 
 		//println("    ", extensionCount, " device extensions");
@@ -1158,65 +1213,12 @@ struct Client
 		return Status.OK;
 	}
 
-	Status createVertexBuffer() {
-		@static auto zone = TracyLoc(null, "Client.createVertexBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		VkDeviceSize bufferSize = vertices.sizeof;
-
-		VkBuffer stagingBuffer;
-		VkDeviceMemory stagingBufferMemory;
-
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
-
-		void* data;
-		vkMapMemory(vkcontext.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-			memcpy(data, vertices.ptr, bufferSize);
-		vkUnmapMemory(vkcontext.device, stagingBufferMemory);
-
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertexBuffer, &vertexBufferMemory);
-
-		copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-		vkDestroyBuffer(vkcontext.device, stagingBuffer, null);
-		vkFreeMemory(vkcontext.device, stagingBufferMemory, null);
-
-		tracy_emit_zone_end(ctx);
-		return Status.OK;
-	}
-
-	Status createIndexBuffer() {
-		@static auto zone = TracyLoc(null, "Client.createIndexBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-		VkDeviceSize bufferSize = indicies.sizeof;
-
-		VkBuffer stagingBuffer;
-		VkDeviceMemory stagingBufferMemory;
-
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &stagingBuffer, &stagingBufferMemory);
-
-		void* data;
-		vkMapMemory(vkcontext.device, stagingBufferMemory, 0, bufferSize, 0, &data);
-		memcpy(data, indicies.ptr, bufferSize);
-		vkUnmapMemory(vkcontext.device, stagingBufferMemory);
-
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &indexBuffer, &indexBufferMemory);
-
-		copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-		vkDestroyBuffer(vkcontext.device, stagingBuffer, null);
-		vkFreeMemory(vkcontext.device, stagingBufferMemory, null);
-		tracy_emit_zone_end(ctx);
-		return Status.OK;
-	}
-
 	Status createUniformBuffers() {
 		@static auto zone = TracyLoc(null, "Client.createUniformBuffers", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		VkDeviceSize bufferSize = UniformBufferObject.sizeof;
-
-		uniformBuffers = resizeArray[VkBuffer](uniformBuffers, vkcontext.NUM_FRAMES);
-		uniformBuffersMemory = resizeArray[VkDeviceMemory](uniformBuffersMemory, vkcontext.NUM_FRAMES);
-
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
-			createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniformBuffers[i], &uniformBuffersMemory[i]);
+			auto frame = &vkcontext.frames[i];
+			createOrResizeBarBuffer(&frame.uniformBuffer, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 		}
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
@@ -1255,10 +1257,11 @@ struct Client
 		}
 
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
-			vkcontext.frames[i].descriptorSet = descriptorSets[i];
+			auto frame = &vkcontext.frames[i];
+			frame.descriptorSet = descriptorSets[i];
 
 			VkDescriptorBufferInfo bufferInfo;
-			bufferInfo.buffer = uniformBuffers[i];
+			bufferInfo.buffer = frame.uniformBuffer.buffer;
 			bufferInfo.offset = 0;
 			bufferInfo.range = UniformBufferObject.sizeof;
 
@@ -1306,47 +1309,9 @@ struct Client
 		return Status.OK;
 	}
 
-	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-		@static auto zone = TracyLoc(null, "Client.copyBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-		VkCommandBufferAllocateInfo allocInfo;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = vkcontext.commandPool;
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(vkcontext.device, &allocInfo, &commandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-		VkBufferCopy copyRegion;
-		copyRegion.srcOffset = 0; // Optional
-		copyRegion.dstOffset = 0; // Optional
-		copyRegion.size = size;
-		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-		vkEndCommandBuffer(commandBuffer);
-
-		VkSubmitInfo submitInfo;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffer;
-
-		vkQueueSubmit(vkcontext.graphicsQueue, 1, &submitInfo, vkcontext.uploadFence);
-		vkWaitForFences(vkcontext.device, 1, &vkcontext.uploadFence, VK_TRUE, u64.max);
-		vkResetFences(vkcontext.device, 1, &vkcontext.uploadFence);
-
-		vkFreeCommandBuffers(vkcontext.device, vkcontext.commandPool, 1, &commandBuffer);
-		tracy_emit_zone_end(ctx);
-	}
-
 	Status findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties, u32* memType) {
-		VkPhysicalDeviceMemoryProperties memProperties;
-		vkGetPhysicalDeviceMemoryProperties(vkcontext.physicalDevice, &memProperties);
-
-		for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-			if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+		for (uint32_t i = 0; i < vkcontext.memProperties.memoryTypeCount; i++) {
+			if ((typeFilter & (1 << i)) && (vkcontext.memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
 				*memType = i;
 				return Status.OK;
 			}
@@ -1365,25 +1330,70 @@ struct Client
 		allocInfo.commandPool = vkcontext.commandPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = vkcontext.NUM_FRAMES;
-
 		if (vkAllocateCommandBuffers(vkcontext.device, &allocInfo, commandBuffers.ptr) != VK_SUCCESS) {
 			println("failed to allocate command buffers!");
 			tracy_emit_zone_end(ctx);
 			return Status.ERR;
 		}
-
 		for (u32 i; i < vkcontext.NUM_FRAMES; ++i) vkcontext.frames[i].commandBuffer = commandBuffers[i];
+
+		VkCommandBufferAllocateInfo allocInfoUpload;
+		allocInfoUpload.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfoUpload.commandPool = vkcontext.commandPool;
+		allocInfoUpload.commandBufferCount = 1;
+		if (vkAllocateCommandBuffers(vkcontext.device, &allocInfoUpload, &vkcontext.uploadCommandBuffer) != VK_SUCCESS) {
+			println("failed to allocate upload command buffer");
+			tracy_emit_zone_end(ctx);
+			return Status.ERR;
+		}
 
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
 	}
 
-	Status recordCommandBuffer(VkCommandBuffer commandBuffer, u32 imageIndex, FrameData* frame) {
+	void createOrResizeBarBuffer(BarBuffer* buffer, VkDeviceSize newSize, VkBufferUsageFlags bufUsage) {
+		VkDeviceSize allocSize = nextPOT[VkDeviceSize](newSize);
+		if (buffer.size >= allocSize) return;
+
+		freeBarBuffer(buffer);
+
+		VkBufferCreateInfo bufCreateInfo;
+		bufCreateInfo.size = allocSize;
+		bufCreateInfo.usage = bufUsage;
+		bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VmaAllocationCreateInfo allocCreateInfo;
+		allocCreateInfo.usage = VmaMemoryUsage.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+		allocCreateInfo.flags = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+			VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+		VmaAllocationInfo allocInfo;
+		vmaCreateBuffer(vkcontext.vkallocator, &bufCreateInfo, &allocCreateInfo, &buffer.buffer, &buffer.allocation, &allocInfo);
+		buffer.size = allocInfo.size;
+
+		//VkMemoryPropertyFlags memPropFlags = vkcontext.memProperties.memoryTypes[allocInfo.memoryType].propertyFlags;
+		//print("Alloced buf: offset ", allocInfo.offset, " size ", allocInfo.size);
+		//printMemoryPropFlags(memPropFlags);
+		//println;
+	}
+
+	void freeBarBuffer(BarBuffer* buffer) {
+		vmaDestroyBuffer(vkcontext.vkallocator, buffer.buffer, buffer.allocation);
+		*buffer = BarBuffer();
+	}
+
+	Status recordCommandBuffer(VkCommandBuffer cmdBuf, u32 imageIndex, FrameData* frame) {
 		@static auto zone = TracyLoc(null, "Client.recordCommandBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		createOrResizeBarBuffer(&frame.vertexBuffer, vertices.byteLength, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+		createOrResizeBarBuffer(&frame.indexBuffer,  indicies.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+
+		fillBarBuffer(&frame.vertexBuffer, vertices.ptr, vertices.byteLength);
+		fillBarBuffer(&frame.indexBuffer, indicies.ptr, indicies.byteLength);
 
 		VkCommandBufferBeginInfo beginInfo;
 
-		if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+		if (vkBeginCommandBuffer(cmdBuf, &beginInfo) != VK_SUCCESS) {
 			println("failed to begin recording command buffer!");
 			return Status.ERR;
 		}
@@ -1402,22 +1412,22 @@ struct Client
 		renderPassInfo.clearValueCount = 1;
 		renderPassInfo.pClearValues = &clearColor;
 
-		vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(cmdBuf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline);
+			vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.graphicsPipeline);
 
 			VkDeviceSize offset = 0;
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &offset);
+			vkCmdBindVertexBuffers(cmdBuf, 0, 1, &frame.vertexBuffer.buffer, &offset);
 
-			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+			vkCmdBindIndexBuffer(cmdBuf, frame.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT16);
 
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipelineLayout, 0, 1, &frame.descriptorSet, 0, null);
+			vkCmdBindDescriptorSets(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipelineLayout, 0, 1, &frame.descriptorSet, 0, null);
 
-			vkCmdDrawIndexed(commandBuffer, cast(u32)indicies.length, 1, 0, 0, 0);
+			vkCmdDrawIndexed(cmdBuf, indicies.length, 1, 0, 0, 0);
 
-		vkCmdEndRenderPass(commandBuffer);
+		vkCmdEndRenderPass(cmdBuf);
 
-		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+		if (vkEndCommandBuffer(cmdBuf) != VK_SUCCESS) {
 			println("failed to record command buffer!");
 			return Status.ERR;
 		}
@@ -1451,16 +1461,14 @@ struct Client
 		return Status.OK;
 	}
 
-	void updateUniformBuffer(f32 time) {
-		UniformBufferObject ubo;
-		ubo.model = rotationMatrixZ(time * degtorad(90));
-		ubo.view = lookAtMatrix(vec3(0, 0, -2), vec3(0, 0, 0), vec3(0, 1, 0));
-		ubo.proj = perspectiveMatrix(degtorad(45), cast(f32)vkcontext.swapchain.swapchainExtent.height / vkcontext.swapchain.swapchainExtent.width, 0.1, 10);
-
-		void* data;
-		vkMapMemory(vkcontext.device, uniformBuffersMemory[vkcontext.frameIndex], 0, ubo.sizeof, 0, &data);
-			memcpy(data, &ubo, ubo.sizeof);
-		vkUnmapMemory(vkcontext.device, uniformBuffersMemory[vkcontext.frameIndex]);
+	void fillBarBuffer(BarBuffer* buffer, void* ptr, u64 length) {
+		VmaAllocationInfo allocInfo;
+		vmaGetAllocationInfo(vkcontext.vkallocator, buffer.allocation, &allocInfo);
+		memcpy(allocInfo.pMappedData, ptr, length);
+		VkMemoryPropertyFlags memPropFlags = vkcontext.memProperties.memoryTypes[allocInfo.memoryType].propertyFlags;
+		if ((memPropFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == 0) {
+			vmaFlushAllocation(vkcontext.vkallocator, buffer.allocation, 0, cast(u64)VK_WHOLE_SIZE);
+		}
 	}
 
 	Status drawFrame(f32 time) {
@@ -1490,7 +1498,14 @@ struct Client
 		vkResetCommandBuffer(frame.commandBuffer, /*VkCommandBufferResetFlagBits*/ 0);
 		recordCommandBuffer(frame.commandBuffer, imageIndex, frame);
 
-		updateUniformBuffer(time);
+		// Update uniforms
+		UniformBufferObject ubo;
+		ubo.model = identityMatrix; //rotationMatrixZ(time * degtorad(90));
+		ubo.view = lookAtMatrix(vec3(0, 0, -1), vec3(0, 0, 0), vec3(0, 1, 0));
+		//ubo.proj = perspectiveMatrix(degtorad(45), cast(f32)vkcontext.swapchain.swapchainExtent.height / vkcontext.swapchain.swapchainExtent.width, 0.1, 10);
+		ubo.proj = perspectiveMatrix(degtorad(90), 1, 0.1, 10);
+		fillBarBuffer(&frame.uniformBuffer, &ubo, ubo.sizeof);
+
 
 		VkSubmitInfo submitInfo;
 
@@ -1683,9 +1698,19 @@ struct Client
 		tracy_emit_zone_end(ctx);
 	}
 
-	void onKey(i32 key, i32 scancode, i32 action, i32 mods)
-	{
-		println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
+	void onKey(i32 key, i32 scancode, i32 action, i32 mods) {
+		//println("onKey key:", key, " scancode:", scancode, " action:", action, " mods:", mods);
+
+		if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+			vertices.clear;
+			indicies.clear;
+		}
+	}
+
+	void onMouseClick(int button, int action, int mods, f32 x, f32 y) {
+		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+			putQuadAt(vec3(x*2-1, y*2-1, 0));
+		}
 	}
 
 	void onFramebufferResize(i32 width, i32 height)
