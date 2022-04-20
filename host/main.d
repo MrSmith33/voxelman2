@@ -346,6 +346,7 @@ void registerHostSymbols(CompilationContext* context)
 	import deps.tracy_ptr;
 	import deps.vma;
 	import deps.zstd;
+	import qoi;
 
 	regHostModule!(deps.enet)("enet");
 	regHostModule!(deps.glfw3)("glfw3");
@@ -372,6 +373,14 @@ void registerHostSymbols(CompilationContext* context)
 		regHostSymbol!__debugbreak("__debugbreak", modId, hostModuleIndex);
 		regHostSymbol!(format_val!float)("format_f32", modId, hostModuleIndex);
 		regHostSymbol!(format_val!double)("format_f64", modId, hostModuleIndex);
+	}
+
+	// QOI
+	{
+		Identifier modId = context.idMap.getOrReg(context, "qoi");
+		LinkIndex hostModuleIndex = context.getOrCreateExternalModule(modId, ObjectModuleKind.isHost);
+		regHostSymbol!qoi_encode("qoi_encode", modId, hostModuleIndex);
+		regHostSymbol!qoi_decode("qoi_decode", modId, hostModuleIndex);
 	}
 }
 

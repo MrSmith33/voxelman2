@@ -33,10 +33,12 @@ Pass `--tracy` flag to the executable to enable tracy. Run the voxelman applicat
 `.lib` files must be placed into `lib/` directory
 
 Download pre-built dependencies from:
-* ~~https://github.com/MrSmith33/voxelman2/releases/download/deps/bin.7z~~ not needed
-* https://github.com/MrSmith33/voxelman2/releases/download/deps/lib.7z
+* https://github.com/MrSmith33/voxelman2/releases/tag/deps
 
 Or build/download them yourself:
+
+<details>
+<summary>Instructions</summary>
 
 * GLFW3: [glfw-3.3.3.bin.WIN64.zip](https://github.com/glfw/glfw/releases/download/3.3.3/glfw-3.3.3.bin.WIN64.zip)`/glfw-3.3.3.bin.WIN64/lib-vc2019/glfw3.lib`
 * Enet: [enet-1.3.17.tar.gz](http://enet.bespin.org/download/enet-1.3.17.tar.gz)`/enet-1.3.17.tar/enet-1.3.17/enet64.lib`
@@ -126,3 +128,5 @@ Or build/download them yourself:
   * Switch to Vulkan 1.3 in `VulkanMemoryAllocator-3.0.0/src/VmaUsage.h` (uncomment `#define VMA_VULKAN_VERSION 1003000`)
   * Build release version
   * Copy `VulkanMemoryAllocator-3.0.0/build/src/Release/VulkanMemoryAllocator.lib`
+
+</details>

@@ -1,0 +1,17 @@
+module core.qoi;
+@extern(module, "qoi"):
+
+enum QOI_COLORSPACE : u8 {
+	SRGB = 0,
+	LINEAR = 1,
+}
+
+struct qoi_desc {
+	u32   width;
+	u32  height;
+	u8 channels;
+	QOI_COLORSPACE colorspace;
+}
+
+void* qoi_encode(void* data, qoi_desc* desc, i32* out_len, void* function(u64 size) malloc);
+void* qoi_decode(void* data, i32 size, qoi_desc* desc, i32 channels, void* function(u64 size) malloc);

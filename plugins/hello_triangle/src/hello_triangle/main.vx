@@ -9,6 +9,8 @@ import core.host;
 import core.kernel32;
 import core.math;
 import core.mdbx;
+import core.mimalloc;
+import core.qoi;
 import core.shaderc;
 import core.tracy;
 import core.utils;
@@ -111,6 +113,15 @@ struct BarBuffer {
 	VmaAllocation allocation;
 }
 
+// 4 channels
+struct ImageData {
+	u8* ptr;
+	u32 width;
+	u32 height;
+
+	u32 byteLength() { return width * height * 4; }
+}
+
 struct Client
 {
 	void run()
@@ -149,6 +160,7 @@ struct Client
 
 	Array[Vertex] vertices;
 	Array[u16] indicies;
+	ImageData fontImage;
 
 	bool isRunning = true;
 
@@ -158,10 +170,10 @@ struct Client
 		Vertex* v = vertices.putVoid(4);
 		u16* i = indicies.putVoid(6);
 
-		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), vec3(1, 0, 0));
-		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), vec3(0, 1, 0));
-		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), vec3(0, 0, 1));
-		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), vec3(1, 1, 1));
+		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), Color(255,   0,   0));
+		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), Color(  0, 255,   0));
+		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), Color(  0,   0, 255));
+		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), Color(255, 255, 255));
 		i[0] = ind + 0;
 		i[1] = ind + 1;
 		i[2] = ind + 2;
@@ -300,6 +312,7 @@ struct Client
 		if (createFramebuffers() != OK) return Status.ERR;
 		if (createCommandPool() != OK) return Status.ERR;
 		if (createCommandBuffers() != OK) return Status.ERR;
+		if (createTextureImage() != OK) return Status.ERR;
 		if (createUniformBuffers() != OK) return Status.ERR;
 		if (createDescriptorPool() != OK) return Status.ERR;
 		if (createDescriptorSets() != OK) return Status.ERR;
@@ -1021,6 +1034,26 @@ struct Client
 		return Status.OK;
 	}
 
+	Status loadTexture(u8[] path, ImageData* result) {
+		u8[] fileData;
+		Status err = readFile(path, &fileData);
+		//println("file ", fileData.length);
+
+		qoi_desc desc;
+		void* pixels = qoi_decode(data: fileData.ptr, size: cast(i32)fileData.length, desc: &desc, channels: 4, malloc: &mi_malloc);
+
+		freeArray[u8](fileData);
+
+		result.ptr = cast(u8*)pixels;
+		result.width = desc.width;
+		result.height = desc.height;
+
+		if (pixels == null) return Status.ERR;
+		//println("img ", path, " w ", result.width, " h ", result.height, " ", cast(u32)desc.colorspace);
+
+		return err;
+	}
+
 	Status loadShaders() {
 		@static auto zone = TracyLoc(null, "Client.loadShaders", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
@@ -1046,6 +1079,8 @@ struct Client
 		vertShaderModule = createShaderModule(vertShaderCode);
 		fragShaderModule = createShaderModule(fragShaderCode);
 
+		freeArray[u8](vertShaderSource);
+		freeArray[u8](fragShaderSource);
 		freeArray[u8](vertShaderCode);
 		freeArray[u8](fragShaderCode);
 
@@ -1209,6 +1244,13 @@ struct Client
 			return Status.ERR;
 		}
 
+		tracy_emit_zone_end(ctx);
+		return Status.OK;
+	}
+
+	Status createTextureImage() {
+		@static auto zone = TracyLoc(null, "Client.createTextureImage", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+		if (loadTexture("../plugins/hello_triangle/res/font_14.qoi", &fontImage) != OK) return Status.ERR;
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
 	}
@@ -1793,10 +1835,17 @@ bool checkExtensions(u8*[] requestedExtensions, VkExtensionProperties[] availabl
 	return true;
 }
 
+struct Color {
+	u8 r;
+	u8 g;
+	u8 b;
+	u8 a = 255;
+}
+
 struct Vertex
 {
 	vec3 pos;
-	vec3 color;
+	Color color;
 
 	@static VkVertexInputBindingDescription getBindingDescription() {
 		VkVertexInputBindingDescription bindingDescription;
@@ -1817,7 +1866,7 @@ struct Vertex
 
 		attributeDescriptions[1].binding = 0;
 		attributeDescriptions[1].location = 1;
-		attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+		attributeDescriptions[1].format = VK_FORMAT_R8G8B8A8_UNORM;
 		attributeDescriptions[1].offset = cast(u32)Vertex.color.offsetof;
 
 		return attributeDescriptions;
