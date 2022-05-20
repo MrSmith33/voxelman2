@@ -180,10 +180,10 @@ struct Client
 		Vertex* v = vertices.putVoid(4);
 		u16* i = indicies.putVoid(6);
 
-		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), Color(255,   0,   0));
-		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), Color(  0, 255,   0));
-		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), Color(  0,   0, 255));
-		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), Color(255, 255, 255));
+		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), Color(255,   0,   0), vec2(0, 0));
+		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), Color(  0, 255,   0), vec2(1, 0));
+		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), Color(  0,   0, 255), vec2(1, 1));
+		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), Color(255, 255, 255), vec2(0, 1));
 		i[0] = ind + 0;
 		i[1] = ind + 1;
 		i[2] = ind + 2;
@@ -246,7 +246,7 @@ struct Client
 		tracy_emit_zone_end(ctx_glfwWindowHint);
 
 		@static auto zone4 = TracyLoc(null, "glfwCreateWindow", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwCreateWindow = tracy_emit_zone_begin(&zone4, TRACY_ON);
-		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Tutorial - Uniform buffers", null, null);
+		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Tutorial - Textures", null, null);
 		tracy_emit_zone_end(ctx_glfwCreateWindow);
 
 		@static auto zone5 = TracyLoc(null, "glfwSetWindowUserPointer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetWindowUserPointer = tracy_emit_zone_begin(&zone5, TRACY_ON);
@@ -1017,16 +1017,24 @@ struct Client
 	Status createDescriptorSetLayout() {
 		@static auto zone = TracyLoc(null, "Client.createDescriptorSetLayout", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
-		VkDescriptorSetLayoutBinding uboLayoutBinding;
-		uboLayoutBinding.binding = 0;
-		uboLayoutBinding.descriptorCount = 1;
-		uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uboLayoutBinding.pImmutableSamplers = null;
-		uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		VkDescriptorSetLayoutBinding[2] bindings;
+		// uboLayoutBinding
+		bindings[0].binding = 0;
+		bindings[0].descriptorCount = 1;
+		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bindings[0].pImmutableSamplers = null;
+		bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		// samplerLayoutBinding
+		bindings[1].binding = 1;
+		bindings[1].descriptorCount = 1;
+		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[1].pImmutableSamplers = null;
+		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo;
-		layoutInfo.bindingCount = 1;
-		layoutInfo.pBindings = &uboLayoutBinding;
+		layoutInfo.bindingCount = cast(u32)bindings.length;
+		layoutInfo.pBindings = bindings.ptr;
 
 		if (vkCreateDescriptorSetLayout(vkcontext.device, &layoutInfo, null, &pipeline.descriptorSetLayout) != VK_SUCCESS) {
 			println("failed to create descriptor set layout!");
@@ -1114,7 +1122,7 @@ struct Client
 		vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
 		VkVertexInputBindingDescription bindingDescription = Vertex.getBindingDescription();
-		VkVertexInputAttributeDescription[2] attributeDescriptions = Vertex.getAttributeDescriptions();
+		auto attributeDescriptions = Vertex.getAttributeDescriptions();
 
 		vertexInputInfo.vertexBindingDescriptionCount = 1;
 		vertexInputInfo.vertexAttributeDescriptionCount = cast(u32)attributeDescriptions.length;
@@ -1462,13 +1470,16 @@ struct Client
 	}
 
 	Status createDescriptorPool() {
-		VkDescriptorPoolSize poolSize;
-		poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSize.descriptorCount = vkcontext.NUM_FRAMES;
+		VkDescriptorPoolSize[2] poolSizes;
+
+		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSizes[0].descriptorCount = vkcontext.NUM_FRAMES;
+		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSizes[1].descriptorCount = vkcontext.NUM_FRAMES;
 
 		VkDescriptorPoolCreateInfo poolInfo;
-		poolInfo.poolSizeCount = 1;
-		poolInfo.pPoolSizes = &poolSize;
+		poolInfo.poolSizeCount = cast(u32)poolSizes.length;
+		poolInfo.pPoolSizes = poolSizes.ptr;
 		poolInfo.maxSets = vkcontext.NUM_FRAMES;
 
 		if (vkCreateDescriptorPool(vkcontext.device, &poolInfo, null, &vkcontext.descriptorPool) != VK_SUCCESS) {
@@ -1497,20 +1508,33 @@ struct Client
 			auto frame = &vkcontext.frames[i];
 			frame.descriptorSet = descriptorSets[i];
 
+			VkWriteDescriptorSet[2] descriptorWrites;
+
 			VkDescriptorBufferInfo bufferInfo;
 			bufferInfo.buffer = frame.uniformBuffer.buffer;
 			bufferInfo.offset = 0;
 			bufferInfo.range = UniformBufferObject.sizeof;
 
-			VkWriteDescriptorSet descriptorWrite;
-			descriptorWrite.dstSet = descriptorSets[i];
-			descriptorWrite.dstBinding = 0;
-			descriptorWrite.dstArrayElement = 0;
-			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			descriptorWrite.descriptorCount = 1;
-			descriptorWrite.pBufferInfo = &bufferInfo;
+			descriptorWrites[0].dstSet = descriptorSets[i];
+			descriptorWrites[0].dstBinding = 0;
+			descriptorWrites[0].dstArrayElement = 0;
+			descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			descriptorWrites[0].descriptorCount = 1;
+			descriptorWrites[0].pBufferInfo = &bufferInfo;
 
-			vkUpdateDescriptorSets(vkcontext.device, 1, &descriptorWrite, 0, null);
+			VkDescriptorImageInfo imageInfo;
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView = vkcontext.textureImageView;
+			imageInfo.sampler = vkcontext.textureSampler;
+
+			descriptorWrites[1].dstSet = descriptorSets[i];
+			descriptorWrites[1].dstBinding = 1;
+			descriptorWrites[1].dstArrayElement = 0;
+			descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrites[1].descriptorCount = 1;
+			descriptorWrites[1].pImageInfo = &imageInfo;
+
+			vkUpdateDescriptorSets(vkcontext.device, cast(u32)descriptorWrites.length, descriptorWrites.ptr, 0, null);
 		}
 		return Status.OK;
 	}
@@ -1585,7 +1609,10 @@ struct Client
 		@static auto zone = TracyLoc(null, "Client.createOrResizeBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkDeviceSize allocSize = nextPOT[VkDeviceSize](newSize);
-		if (buffer.size >= allocSize) return Status.OK;
+		if (buffer.size >= allocSize) {
+			tracy_emit_zone_end(ctx);
+			return Status.OK;
+		}
 
 		freeBuffer(buffer);
 
@@ -2066,6 +2093,7 @@ struct Vertex
 {
 	vec3 pos;
 	Color color;
+	vec2 texCoord;
 
 	@static VkVertexInputBindingDescription getBindingDescription() {
 		VkVertexInputBindingDescription bindingDescription;
@@ -2076,8 +2104,8 @@ struct Vertex
 		return bindingDescription;
 	}
 
-	@static VkVertexInputAttributeDescription[2] getAttributeDescriptions() {
-		VkVertexInputAttributeDescription[2] attributeDescriptions;
+	@static VkVertexInputAttributeDescription[3] getAttributeDescriptions() {
+		VkVertexInputAttributeDescription[3] attributeDescriptions;
 
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
@@ -2088,6 +2116,11 @@ struct Vertex
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format = VK_FORMAT_R8G8B8A8_UNORM;
 		attributeDescriptions[1].offset = cast(u32)Vertex.color.offsetof;
+
+		attributeDescriptions[2].binding = 0;
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[2].offset = cast(u32)Vertex.texCoord.offsetof;
 
 		return attributeDescriptions;
 	}
