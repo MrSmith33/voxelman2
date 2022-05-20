@@ -65,6 +65,8 @@ struct VkContext {
 
 	GpuBuffer stagingBuffer;
 	GpuImage textureImage;
+	VkImageView textureImageView;
+	VkSampler textureSampler;
 
 	VmaAllocator vkallocator;
 }
@@ -321,6 +323,8 @@ struct Client
 		if (createCommandPool() != OK) return Status.ERR;
 		if (createCommandBuffers() != OK) return Status.ERR;
 		if (createTextureImage() != OK) return Status.ERR;
+		if (createTextureImageView() != OK) return Status.ERR;
+		if (createTextureSampler() != OK) return Status.ERR;
 		if (createUniformBuffers() != OK) return Status.ERR;
 		if (createDescriptorPool() != OK) return Status.ERR;
 		if (createDescriptorSets() != OK) return Status.ERR;
@@ -389,6 +393,9 @@ struct Client
 		}
 
 		freeBuffer(&vkcontext.stagingBuffer);
+
+		vkDestroySampler(vkcontext.device, vkcontext.textureSampler, null);
+		vkDestroyImageView(vkcontext.device, vkcontext.textureImageView, null);
 		freeImage(&vkcontext.textureImage);
 
 		vkDestroyFence(vkcontext.device, vkcontext.uploadFence, null);
@@ -851,6 +858,7 @@ struct Client
 		}
 
 		VkPhysicalDeviceFeatures deviceFeatures;
+		deviceFeatures.samplerAnisotropy = VK_TRUE;
 		createInfo.pEnabledFeatures = &deviceFeatures;
 
 		@static auto zone1 = TracyLoc(null, "vkCreateDevice", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
@@ -949,22 +957,7 @@ struct Client
 		@static auto zone = TracyLoc(null, "Client.createImageViews", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		for (u32 i = 0; i < vkcontext.swapchain.numImages; ++i) {
-			VkImageViewCreateInfo createInfo;
-			createInfo.image = vkcontext.swapchain.images[i].image;
-			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-			createInfo.format = vkcontext.swapchain.swapchainImageFormat;
-			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			createInfo.subresourceRange.baseMipLevel = 0;
-			createInfo.subresourceRange.levelCount = 1;
-			createInfo.subresourceRange.baseArrayLayer = 0;
-			createInfo.subresourceRange.layerCount = 1;
-
-			if (vkCreateImageView(vkcontext.device, &createInfo, null, &vkcontext.swapchain.images[i].imageView) != VK_SUCCESS) {
-				println("failed to create image views!");
+			if (createImageView(vkcontext.swapchain.images[i].image, vkcontext.swapchain.swapchainImageFormat, &vkcontext.swapchain.images[i].imageView) != OK) {
 				tracy_emit_zone_end(ctx);
 				return Status.ERR;
 			}
@@ -1372,13 +1365,19 @@ struct Client
 		vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
 		endSingleTimeCommands(commandBuffer);
-    }
+	}
 
 	Status createTextureImage() {
 		@static auto zone = TracyLoc(null, "Client.createTextureImage", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-		if (loadTexture("../plugins/hello_triangle/res/font_14.qoi", &fontImage) != OK) return Status.ERR;
+		if (loadTexture("../plugins/hello_triangle/res/font_14.qoi", &fontImage) != OK) {
+			tracy_emit_zone_end(ctx);
+			return Status.ERR;
+		}
 
-		if (createOrResizeStagingBuffer(&vkcontext.stagingBuffer, fontImage.byteLength) != OK) return Status.ERR;
+		if (createOrResizeStagingBuffer(&vkcontext.stagingBuffer, fontImage.byteLength) != OK) {
+			tracy_emit_zone_end(ctx);
+			return Status.ERR;
+		}
 
 		fillHostBuffer(&vkcontext.stagingBuffer, fontImage.ptr, fontImage.byteLength);
 
@@ -1389,6 +1388,63 @@ struct Client
 		copyBufferToImage(vkcontext.stagingBuffer.buffer, vkcontext.textureImage.image, fontImage.size);
 
 		transitionImageLayout(vkcontext.textureImage.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		tracy_emit_zone_end(ctx);
+		return Status.OK;
+	}
+
+	Status createTextureImageView() {
+		return createImageView(vkcontext.textureImage.image, VK_FORMAT_R8G8B8A8_SRGB, &vkcontext.textureImageView);
+	}
+
+	Status createTextureSampler() {
+		@static auto zone = TracyLoc(null, "Client.createTextureSampler", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		VkPhysicalDeviceProperties properties;
+		vkGetPhysicalDeviceProperties(vkcontext.physicalDevice, &properties);
+
+		VkSamplerCreateInfo samplerInfo;
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.anisotropyEnable = VK_TRUE;
+		samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+		if (vkCreateSampler(vkcontext.device, &samplerInfo, null, &vkcontext.textureSampler) != VK_SUCCESS) {
+			println("failed to create texture sampler!");
+			tracy_emit_zone_end(ctx);
+			return Status.ERR;
+		}
+
+		tracy_emit_zone_end(ctx);
+		return Status.OK;
+	}
+
+	Status createImageView(VkImage image, VkFormat format, VkImageView* result) {
+		@static auto zone = TracyLoc(null, "Client.createImageView", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+		VkImageViewCreateInfo viewInfo;
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = image;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = format;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+
+		if (vkCreateImageView(vkcontext.device, &viewInfo, null, result) != VK_SUCCESS) {
+			println("failed to create texture image view!");
+			return Status.ERR;
+		}
 
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
