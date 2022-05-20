@@ -63,6 +63,9 @@ struct VkContext {
 	Swapchain swapchain;
 	FrameData[NUM_FRAMES] frames;
 
+	GpuBuffer stagingBuffer;
+	GpuImage textureImage;
+
 	VmaAllocator vkallocator;
 }
 
@@ -95,9 +98,9 @@ struct FrameData {
 	VkCommandBuffer commandBuffer;
 	VkDescriptorSet descriptorSet;
 
-	BarBuffer vertexBuffer;
-	BarBuffer indexBuffer;
-	BarBuffer uniformBuffer;
+	GpuBuffer vertexBuffer;
+	GpuBuffer indexBuffer;
+	GpuBuffer uniformBuffer;
 }
 
 struct Pipeline {
@@ -106,20 +109,25 @@ struct Pipeline {
 	VkPipeline graphicsPipeline;
 }
 
-// Single buffer for single frame stored in BAR memory
-struct BarBuffer {
-	VkDeviceSize        size;
-	VkBuffer          buffer;
+// Technically it is not only GPU buffer. But it is always GPU mapped.
+struct GpuBuffer {
+	VkDeviceSize  size;
+	VkBuffer      buffer;
 	VmaAllocation allocation;
 }
 
-// 4 channels
+struct GpuImage {
+	VkImage       image;
+	VmaAllocation allocation;
+}
+
+
+// 4 channels, u8u8u8u8 rgba
 struct ImageData {
 	u8* ptr;
-	u32 width;
-	u32 height;
+	uvec2 size;
 
-	u32 byteLength() { return width * height * 4; }
+	u32 byteLength() { return size.x * size.y * 4; }
 }
 
 struct Client
@@ -375,10 +383,13 @@ struct Client
 			vkDestroySemaphore(vkcontext.device, vkcontext.frames[i].imageAvailableSemaphore, null);
 			vkDestroyFence(vkcontext.device, vkcontext.frames[i].inFlightFence, null);
 
-			freeBarBuffer(&frame.vertexBuffer);
-			freeBarBuffer(&frame.indexBuffer);
-			freeBarBuffer(&frame.uniformBuffer);
+			freeBuffer(&frame.vertexBuffer);
+			freeBuffer(&frame.indexBuffer);
+			freeBuffer(&frame.uniformBuffer);
 		}
+
+		freeBuffer(&vkcontext.stagingBuffer);
+		freeImage(&vkcontext.textureImage);
 
 		vkDestroyFence(vkcontext.device, vkcontext.uploadFence, null);
 
@@ -1045,8 +1056,8 @@ struct Client
 		freeArray[u8](fileData);
 
 		result.ptr = cast(u8*)pixels;
-		result.width = desc.width;
-		result.height = desc.height;
+		result.size.x = desc.width;
+		result.size.y = desc.height;
 
 		if (pixels == null) return Status.ERR;
 		//println("img ", path, " w ", result.width, " h ", result.height, " ", cast(u32)desc.colorspace);
@@ -1248,9 +1259,137 @@ struct Client
 		return Status.OK;
 	}
 
+	VkCommandBuffer beginSingleTimeCommands() {
+		VkCommandBufferAllocateInfo allocInfo;
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandPool = vkcontext.commandPool;
+		allocInfo.commandBufferCount = 1;
+
+		VkCommandBuffer commandBuffer;
+		vkAllocateCommandBuffers(vkcontext.device, &allocInfo, &commandBuffer);
+
+		VkCommandBufferBeginInfo beginInfo;
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+		return commandBuffer;
+	}
+
+	void endSingleTimeCommands(VkCommandBuffer commandBuffer) {
+		vkEndCommandBuffer(commandBuffer);
+
+		VkSubmitInfo submitInfo;
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffer;
+
+		vkQueueSubmit(vkcontext.graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+		vkQueueWaitIdle(vkcontext.graphicsQueue);
+
+		vkFreeCommandBuffers(vkcontext.device, vkcontext.commandPool, 1, &commandBuffer);
+	}
+
+	void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+		VkBufferCopy copyRegion;
+		copyRegion.size = size;
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		endSingleTimeCommands(commandBuffer);
+	}
+
+	Status transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+		VkImageMemoryBarrier barrier;
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = oldLayout;
+		barrier.newLayout = newLayout;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.image = image;
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseMipLevel = 0;
+		barrier.subresourceRange.levelCount = 1;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.layerCount = 1;
+
+		VkPipelineStageFlags srcStage;
+		VkPipelineStageFlags dstStage;
+
+		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		} else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		} else {
+			println("unsupported layout transition!");
+			return Status.ERR;
+		}
+
+		vkCmdPipelineBarrier(
+			commandBuffer : commandBuffer,
+			srcStageMask : srcStage,
+			dstStageMask : dstStage,
+			dependencyFlags : 0,
+			memoryBarrierCount : 0,
+			pMemoryBarriers : null,
+			bufferMemoryBarrierCount : 0,
+			pBufferMemoryBarriers : null,
+			imageMemoryBarrierCount : 1,
+			pImageMemoryBarriers : &barrier
+		);
+
+		endSingleTimeCommands(commandBuffer);
+		return Status.OK;
+	}
+
+	void copyBufferToImage(VkBuffer buffer, VkImage image, uvec2 size) {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+
+		VkBufferImageCopy region;
+		region.bufferOffset = 0;
+		region.bufferRowLength = 0;
+		region.bufferImageHeight = 0;
+		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		region.imageSubresource.mipLevel = 0;
+		region.imageSubresource.baseArrayLayer = 0;
+		region.imageSubresource.layerCount = 1;
+		region.imageOffset = VkOffset3D(0, 0, 0);
+		region.imageExtent = VkExtent3D(size.x, size.y, 1);
+
+		vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+		endSingleTimeCommands(commandBuffer);
+    }
+
 	Status createTextureImage() {
 		@static auto zone = TracyLoc(null, "Client.createTextureImage", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 		if (loadTexture("../plugins/hello_triangle/res/font_14.qoi", &fontImage) != OK) return Status.ERR;
+
+		if (createOrResizeStagingBuffer(&vkcontext.stagingBuffer, fontImage.byteLength) != OK) return Status.ERR;
+
+		fillHostBuffer(&vkcontext.stagingBuffer, fontImage.ptr, fontImage.byteLength);
+
+		createImage(&vkcontext.textureImage, fontImage.size);
+
+		transitionImageLayout(vkcontext.textureImage.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		copyBufferToImage(vkcontext.stagingBuffer.buffer, vkcontext.textureImage.image, fontImage.size);
+
+		transitionImageLayout(vkcontext.textureImage.image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 		tracy_emit_zone_end(ctx);
 		return Status.OK;
 	}
@@ -1320,37 +1459,6 @@ struct Client
 		return Status.OK;
 	}
 
-	Status createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory) {
-		@static auto zone = TracyLoc(null, "Client.createBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		VkBufferCreateInfo bufferInfo;
-		bufferInfo.size = size;
-		bufferInfo.usage = usage;
-		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-		if (vkCreateBuffer(vkcontext.device, &bufferInfo, null, buffer) != VK_SUCCESS) {
-			println("failed to create buffer!");
-			return Status.ERR;
-		}
-
-		VkMemoryRequirements memRequirements;
-		vkGetBufferMemoryRequirements(vkcontext.device, *buffer, &memRequirements);
-
-		VkMemoryAllocateInfo allocInfo;
-		allocInfo.allocationSize = memRequirements.size;
-		if (findMemoryType(memRequirements.memoryTypeBits, properties, &allocInfo.memoryTypeIndex)) return Status.ERR;
-
-		if (vkAllocateMemory(vkcontext.device, &allocInfo, null, bufferMemory) != VK_SUCCESS) {
-			println("failed to allocate buffer memory!");
-			return Status.ERR;
-		}
-
-		vkBindBufferMemory(vkcontext.device, *buffer, *bufferMemory, 0);
-
-		tracy_emit_zone_end(ctx);
-		return Status.OK;
-	}
-
 	Status findMemoryType(u32 typeFilter, VkMemoryPropertyFlags properties, u32* memType) {
 		for (uint32_t i = 0; i < vkcontext.memProperties.memoryTypeCount; i++) {
 			if ((typeFilter & (1 << i)) && (vkcontext.memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
@@ -1393,21 +1501,47 @@ struct Client
 		return Status.OK;
 	}
 
-	void createOrResizeBarBuffer(BarBuffer* buffer, VkDeviceSize newSize, VkBufferUsageFlags bufUsage) {
-		VkDeviceSize allocSize = nextPOT[VkDeviceSize](newSize);
-		if (buffer.size >= allocSize) return;
-
-		freeBarBuffer(buffer);
-
-		VkBufferCreateInfo bufCreateInfo;
-		bufCreateInfo.size = allocSize;
-		bufCreateInfo.usage = bufUsage;
-		bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	void createImage(GpuImage* image, uvec2 size) {
+		VkImageCreateInfo imgCreateInfo;
+		imgCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+		imgCreateInfo.extent.width = size.x;
+		imgCreateInfo.extent.height = size.y;
+		imgCreateInfo.extent.depth = 1;
+		imgCreateInfo.mipLevels = 1;
+		imgCreateInfo.arrayLayers = 1;
+		imgCreateInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		imgCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imgCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imgCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		imgCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 
 		VmaAllocationCreateInfo allocCreateInfo;
 		allocCreateInfo.usage = VmaMemoryUsage.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-		allocCreateInfo.flags = VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-			VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		allocCreateInfo.flags = 0;
+		allocCreateInfo.priority = 0.0;
+
+		VkImage img;
+		VmaAllocation alloc;
+		vmaCreateImage(vkcontext.vkallocator, &imgCreateInfo, &allocCreateInfo, &image.image, &image.allocation, null);
+	}
+
+	Status createOrResizeBuffer(GpuBuffer* buffer, VkDeviceSize newSize, VkBufferUsageFlags bufferUsage, VmaMemoryUsage memUsage, VmaAllocationCreateFlags flags) {
+		@static auto zone = TracyLoc(null, "Client.createOrResizeBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
+
+		VkDeviceSize allocSize = nextPOT[VkDeviceSize](newSize);
+		if (buffer.size >= allocSize) return Status.OK;
+
+		freeBuffer(buffer);
+
+		VkBufferCreateInfo bufCreateInfo;
+		bufCreateInfo.size = allocSize;
+		bufCreateInfo.usage = bufferUsage;
+		bufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		VmaAllocationCreateInfo allocCreateInfo;
+		allocCreateInfo.usage = memUsage;
+		allocCreateInfo.flags = flags;
+		allocCreateInfo.priority = 0.0;
 
 		VmaAllocationInfo allocInfo;
 		vmaCreateBuffer(vkcontext.vkallocator, &bufCreateInfo, &allocCreateInfo, &buffer.buffer, &buffer.allocation, &allocInfo);
@@ -1417,11 +1551,40 @@ struct Client
 		//print("Alloced buf: offset ", allocInfo.offset, " size ", allocInfo.size);
 		//printMemoryPropFlags(memPropFlags);
 		//println;
+
+		tracy_emit_zone_end(ctx);
+		return Status.OK;
 	}
 
-	void freeBarBuffer(BarBuffer* buffer) {
+	Status createOrResizeStagingBuffer(GpuBuffer* buffer, VkDeviceSize newSize) {
+		return createOrResizeBuffer(
+			buffer : buffer,
+			newSize : newSize,
+			bufferUsage : VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			memUsage : VmaMemoryUsage.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+			flags : VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+			        VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_MAPPED_BIT);
+	}
+
+	// Create buffer for single frame stored in BAR memory
+	Status createOrResizeBarBuffer(GpuBuffer* buffer, VkDeviceSize newSize, VkBufferUsageFlags bufferUsage) {
+		return createOrResizeBuffer(
+			buffer : buffer,
+			newSize : newSize,
+			bufferUsage : bufferUsage,
+			memUsage : VmaMemoryUsage.VMA_MEMORY_USAGE_AUTO_PREFER_HOST,
+			flags : VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+			        VmaAllocationCreateFlagBits.VMA_ALLOCATION_CREATE_MAPPED_BIT);
+	}
+
+	void freeBuffer(GpuBuffer* buffer) {
 		vmaDestroyBuffer(vkcontext.vkallocator, buffer.buffer, buffer.allocation);
-		*buffer = BarBuffer();
+		*buffer = GpuBuffer();
+	}
+
+	void freeImage(GpuImage* image) {
+		vmaDestroyImage(vkcontext.vkallocator, image.image, image.allocation);
+		*image = GpuImage();
 	}
 
 	Status recordCommandBuffer(VkCommandBuffer cmdBuf, u32 imageIndex, FrameData* frame) {
@@ -1430,8 +1593,8 @@ struct Client
 		createOrResizeBarBuffer(&frame.vertexBuffer, vertices.byteLength, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 		createOrResizeBarBuffer(&frame.indexBuffer,  indicies.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
-		fillBarBuffer(&frame.vertexBuffer, vertices.ptr, vertices.byteLength);
-		fillBarBuffer(&frame.indexBuffer, indicies.ptr, indicies.byteLength);
+		fillHostBuffer(&frame.vertexBuffer, vertices.ptr, vertices.byteLength);
+		fillHostBuffer(&frame.indexBuffer, indicies.ptr, indicies.byteLength);
 
 		VkCommandBufferBeginInfo beginInfo;
 
@@ -1503,7 +1666,8 @@ struct Client
 		return Status.OK;
 	}
 
-	void fillBarBuffer(BarBuffer* buffer, void* ptr, u64 length) {
+	// Buffer must be BAR or staging
+	void fillHostBuffer(GpuBuffer* buffer, void* ptr, u64 length) {
 		VmaAllocationInfo allocInfo;
 		vmaGetAllocationInfo(vkcontext.vkallocator, buffer.allocation, &allocInfo);
 		memcpy(allocInfo.pMappedData, ptr, length);
@@ -1546,7 +1710,7 @@ struct Client
 		ubo.view = lookAtMatrix(vec3(0, 0, -1), vec3(0, 0, 0), vec3(0, 1, 0));
 		//ubo.proj = perspectiveMatrix(degtorad(45), cast(f32)vkcontext.swapchain.swapchainExtent.height / vkcontext.swapchain.swapchainExtent.width, 0.1, 10);
 		ubo.proj = perspectiveMatrix(degtorad(90), 1, 0.1, 10);
-		fillBarBuffer(&frame.uniformBuffer, &ubo, ubo.sizeof);
+		fillHostBuffer(&frame.uniformBuffer, &ubo, ubo.sizeof);
 
 
 		VkSubmitInfo submitInfo;

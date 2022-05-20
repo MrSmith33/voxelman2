@@ -82,10 +82,10 @@ struct ENetSocketSet
 
 struct ENetCompressor
 {
-   void* context;
-   u64 function(void* context, ENetBuffer* inBuffers, u64 inBufferCount, u64 inLimit, u8* outData, u64 outLimit) compress;
-   u64 function(void* context, u8* inData, u64 inLimit, u8* outData, u64 outLimit) decompress;
-   void function(void* context) destroy;
+	void* context;
+	u64 function(void* context, ENetBuffer* inBuffers, u64 inBufferCount, u64 inLimit, u8* outData, u64 outLimit) compress;
+	u64 function(void* context, u8* inData, u64 inLimit, u8* outData, u64 outLimit) decompress;
+	void function(void* context) destroy;
 }
 
 i32 enet_initialize();
