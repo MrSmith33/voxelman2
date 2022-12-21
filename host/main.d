@@ -337,6 +337,7 @@ void registerHostSymbols(CompilationContext* context)
 	}
 
 	import deps.enet;
+	import deps.game_networking_sockets;
 	import deps.glfw3;
 	import deps.kernel32;
 	import deps.lz4;
@@ -349,6 +350,7 @@ void registerHostSymbols(CompilationContext* context)
 	import qoi;
 
 	regHostModule!(deps.enet)("enet");
+	regHostModule!(deps.game_networking_sockets)("game_networking_sockets");
 	regHostModule!(deps.glfw3)("glfw3");
 	regHostModule!(deps.kernel32)("kernel32");
 	regHostModule!(deps.lz4)("lz4");
