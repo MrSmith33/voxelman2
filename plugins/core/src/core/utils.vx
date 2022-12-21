@@ -380,28 +380,28 @@ enum INT_BUF_SIZE = 66;
 void printInt(i64 i, u32 minSize = 1, u8 base = 10)
 {
 	u8[INT_BUF_SIZE] buf;
-	u8[] res = formatInt(i, &buf, 1, base);
-	print(res);
+	u8[] res = formatInt(i, &buf, minSize, base);
+	printString(res);
 }
 void printUint(u64 i, u32 minSize = 1, u8 base = 10)
 {
 	u8[INT_BUF_SIZE] buf;
-	u8[] res = formatUint(i, &buf, 1, base);
-	print(res);
+	u8[] res = formatUint(i, &buf, minSize, base);
+	printString(res);
 }
 
 void print_f32(f32 val)
 {
 	u8[64] buf;
 	u8[] res = format_f32(&buf, val);
-	print(res);
+	printString(res);
 }
 
 void print_f64(f64 val)
 {
 	u8[64] buf;
 	u8[] res = format_f64(&buf, val);
-	print(res);
+	printString(res);
 }
 
 @extern(module, "host") u8[] format_f32(u8[64]* buf, f32 f);

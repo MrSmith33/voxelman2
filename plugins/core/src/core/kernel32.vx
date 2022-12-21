@@ -3,6 +3,7 @@ module core.kernel32;
 
 u32 GetLastError();
 
+u32 GetCurrentThreadId();
 noreturn ExitProcess(u32 uExitCode);
 noreturn ExitThread(u32 uExitCode);
 u64 GetTickCount64();

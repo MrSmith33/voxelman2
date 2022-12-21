@@ -1,0 +1,19 @@
+module hello_triangle.image;
+
+import core.utils;
+import core.vector;
+import core.mimalloc;
+
+// 4 channels, u8u8u8u8 rgba
+struct ImageData {
+	u8* ptr;
+	uvec2 size;
+
+	u32 byteLength() { return size.x * size.y * 4; }
+
+	void free() {
+		mi_free(ptr);
+		ptr = null;
+		size = uvec2(0, 0);
+	}
+}

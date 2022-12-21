@@ -19,9 +19,11 @@ import core.vulkan.functions;
 import core.vulkan.types;
 import core.vulkan.vma;
 
+import hello_triangle.image;
 
 void main()
 {
+	println("Main thread ", GetCurrentThreadId());
 	__init_utils();
 
 	Client client;
@@ -100,9 +102,9 @@ struct FrameData {
 	VkCommandBuffer commandBuffer;
 	VkDescriptorSet descriptorSet;
 
-	GpuBuffer vertexBuffer;
-	GpuBuffer indexBuffer;
-	GpuBuffer uniformBuffer;
+	GpuBuffer vertexBuffer;  // BAR buffer
+	GpuBuffer indexBuffer;   // BAR buffer
+	GpuBuffer uniformBuffer; // BAR buffer
 }
 
 struct Pipeline {
@@ -123,20 +125,12 @@ struct GpuImage {
 	VmaAllocation allocation;
 }
 
-
-// 4 channels, u8u8u8u8 rgba
-struct ImageData {
-	u8* ptr;
-	uvec2 size;
-
-	u32 byteLength() { return size.x * size.y * 4; }
-}
-
 struct Client
 {
 	void run()
 	{
 		if (init()) return;
+		glfwSetWindowRefreshCallback(window, &window_refresh_callback);
 		mainLoop();
 		free();
 	}
@@ -154,6 +148,7 @@ struct Client
 
 	Pipeline pipeline;
 
+	ivec2 fbsize;
 	bool framebufferResized = false;
 
 	enum WIDTH = 800;
@@ -168,22 +163,25 @@ struct Client
 	u8*[1] validationLayers;
 	u8*[1] deviceExtensions;
 
-	Array[Vertex] vertices;
+	Array[UiVertex] vertices;
 	Array[u16] indicies;
 	ImageData fontImage;
 
 	bool isRunning = true;
 
-	void putQuadAt(vec3 pos) {
+	void putQuadAt(vec2 pos) {
 		u16 ind = cast(u16)vertices.length;
 
-		Vertex* v = vertices.putVoid(4);
+		UiVertex* v = vertices.putVoid(4);
 		u16* i = indicies.putVoid(6);
 
-		v[0] = Vertex(add_vec3(vec3(-0.1, -0.1, 0), pos), Color(255,   0,   0), vec2(0, 0));
-		v[1] = Vertex(add_vec3(vec3( 0.1, -0.1, 0), pos), Color(  0, 255,   0), vec2(1, 0));
-		v[2] = Vertex(add_vec3(vec3( 0.1,  0.1, 0), pos), Color(  0,   0, 255), vec2(1, 1));
-		v[3] = Vertex(add_vec3(vec3(-0.1,  0.1, 0), pos), Color(255, 255, 255), vec2(0, 1));
+		u16 scale = 1;
+		u16 x = cast(u16)fontImage.size.x;
+		u16 y = cast(u16)fontImage.size.y;
+		v[0] = UiVertex(add_vec2(vec2(0, 0), pos), u16vec2(0, 0), Color(255,   0,   0));
+		v[1] = UiVertex(add_vec2(vec2(x * scale, 0), pos), u16vec2(x, 0), Color(  0, 255,   0));
+		v[2] = UiVertex(add_vec2(vec2(x * scale, y * scale), pos), u16vec2(x, y), Color(  0,   0, 255));
+		v[3] = UiVertex(add_vec2(vec2(0, y * scale), pos), u16vec2(0, y), Color(255, 255, 255));
 		i[0] = ind + 0;
 		i[1] = ind + 1;
 		i[2] = ind + 2;
@@ -195,8 +193,6 @@ struct Client
 	Status init()
 	{
 		@static auto zone = TracyLoc(null, "Client.init", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-
-		putQuadAt(vec3(0,0,0));
 
 		validationLayers[0] = "VK_LAYER_KHRONOS_validation";
 		deviceExtensions[0] = "VK_KHR_swapchain";
@@ -224,6 +220,8 @@ struct Client
 
 		tracy_emit_zone_end(ctx);
 
+		putQuadAt(vec2(5, 5));
+
 		return Status.OK;
 	}
 
@@ -249,18 +247,27 @@ struct Client
 		window = glfwCreateWindow(WIDTH, HEIGHT, "Voxelman - Vulkan Tutorial - Textures", null, null);
 		tracy_emit_zone_end(ctx_glfwCreateWindow);
 
+		glfwGetFramebufferSize(window, &fbsize.x, &fbsize.y);
+		f32 xscale;
+		f32 yscale;
+		glfwGetWindowContentScale(window, &xscale, &yscale);
+		int windowx;
+		int windowy;
+		glfwGetWindowSize(window, &windowx, &windowy);
+		println("Scale ", xscale, " ", yscale);
+		println("Window ", windowx, " ", windowy);
+		println("FB ", fbsize.x, " ", fbsize.y);
+
 		@static auto zone5 = TracyLoc(null, "glfwSetWindowUserPointer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetWindowUserPointer = tracy_emit_zone_begin(&zone5, TRACY_ON);
 		glfwSetWindowUserPointer(window, this);
 		tracy_emit_zone_end(ctx_glfwSetWindowUserPointer);
 
-		@static auto zone6 = TracyLoc(null, "glfwSetKeyCallback", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetKeyCallback = tracy_emit_zone_begin(&zone6, TRACY_ON);
+		@static auto zone6 = TracyLoc(null, "glfwSet*Callback", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetCallback = tracy_emit_zone_begin(&zone6, TRACY_ON);
 		glfwSetKeyCallback(window, &glfw_key_callback);
 		glfwSetMouseButtonCallback(window, &glfw_mouse_button_callback);
-		tracy_emit_zone_end(ctx_glfwSetKeyCallback);
-
-		@static auto zone7 = TracyLoc(null, "glfwSetFramebufferSizeCallback", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx_glfwSetFBCallback = tracy_emit_zone_begin(&zone7, TRACY_ON);
 		glfwSetFramebufferSizeCallback(window, &glfw_framebuffer_resize_callback);
-		tracy_emit_zone_end(ctx_glfwSetFBCallback);
+		glfwSetWindowContentScaleCallback(window, &window_content_scale_callback);
+		tracy_emit_zone_end(ctx_glfwSetCallback);
 
 		tracy_emit_zone_end(ctx);
 
@@ -279,19 +286,25 @@ struct Client
 		f64 xpos;
 		f64 ypos;
 		glfwGetCursorPos(window, &xpos, &ypos);
-		i32 width;
-		i32 height;
-		glfwGetFramebufferSize(window, &width, &height);
-		if (width == 0 || height == 0) return;
-		f32 x = cast(f32)xpos/width;
-		f32 y = cast(f32)ypos/height;
-		client.onMouseClick(button, action, mods, x, y);
+		client.onMouseClick(button, action, mods, cast(f32)xpos, cast(f32)ypos);
 	}
 
 	@static void glfw_framebuffer_resize_callback(GLFWwindow* window, i32 width, i32 height)
 	{
 		Client* client = cast(Client*)glfwGetWindowUserPointer(window);
 		client.onFramebufferResize(width, height);
+	}
+
+	@static void window_content_scale_callback(GLFWwindow* window, f32 xscale, f32 yscale)
+	{
+		Client* client = cast(Client*)glfwGetWindowUserPointer(window);
+		client.onContentScale(xscale, yscale);
+	}
+
+	@static void window_refresh_callback(GLFWwindow* window)
+	{
+		Client* client = cast(Client*)glfwGetWindowUserPointer(window);
+		client.onRefresh();
 	}
 
 	Status initVulkan()
@@ -337,21 +350,30 @@ struct Client
 	void mainLoop()
 	{
 		while(isRunning && !glfwWindowShouldClose(window)) {
-			f64 time = glfwGetTime();
-			update();
-			Status err = drawFrame(cast(f32)time);
-			if (err) isRunning = false;
-			tracy_emit_frame_mark();
+			// glfwPollEvents must be outside of `frame`, because frame is also called from onRefresh
+			@static auto zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
+			glfwPollEvents();
+			tracy_emit_zone_end(tracy_ctx1);
+			frame();
 		}
 
 		vkDeviceWaitIdle(vkcontext.device);
 	}
 
+	// This is called from main loop and onRefresh
+	void frame()
+	{
+		//println("Thread ", GetCurrentThreadId());
+		f64 time = glfwGetTime();
+		update();
+		Status err = drawFrame(cast(f32)time);
+		if (err) isRunning = false;
+		tracy_emit_frame_mark();
+	}
+
 	void update()
 	{
-		@static auto zone_loc1 = TracyLoc(null, "glfwPollEvents", "main.vx", cast(u32)__LINE__, 0x00AA00); TracyZoneCtx tracy_ctx1 = tracy_emit_zone_begin(&zone_loc1, TRACY_ON);
-		glfwPollEvents();
-		tracy_emit_zone_end(tracy_ctx1);
+
 	}
 
 	void free()
@@ -1061,7 +1083,7 @@ struct Client
 		result.size.y = desc.height;
 
 		if (pixels == null) return Status.ERR;
-		//println("img ", path, " w ", result.width, " h ", result.height, " ", cast(u32)desc.colorspace);
+		println("img ", path, " w ", result.size.x, " h ", result.size.y, " ", cast(u32)desc.colorspace);
 
 		return err;
 	}
@@ -1071,18 +1093,18 @@ struct Client
 
 		@static auto zone1 = TracyLoc("vertShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx1 = tracy_emit_zone_begin(&zone1, TRACY_ON);
 		u8[] vertShaderSource;
-		Status err1 = readFile("../plugins/hello_triangle/res/shader.vert", &vertShaderSource);
+		Status err1 = readFile("../plugins/hello_triangle/res/ui.shader.vert", &vertShaderSource);
 		tracy_emit_zone_end(ctx1);
 		@static auto zone2 = TracyLoc("fragShaderSource", "utils.readFile", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx2 = tracy_emit_zone_begin(&zone2, TRACY_ON);
 		u8[] fragShaderSource;
-		Status err2 = readFile("../plugins/hello_triangle/res/shader.frag", &fragShaderSource);
+		Status err2 = readFile("../plugins/hello_triangle/res/ui.shader.frag", &fragShaderSource);
 		tracy_emit_zone_end(ctx2);
 
 		shaderc_compiler_t compiler = shaderc_compiler_initialize();
 		u8[] vertShaderCode;
 		u8[] fragShaderCode;
-		Status err3 = compileShader(&vertShaderCode, compiler, vertShaderSource, "shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
-		Status err4 = compileShader(&fragShaderCode, compiler, fragShaderSource, "shader.frag", "main", shaderc_shader_kind.shaderc_glsl_fragment_shader);
+		Status err3 = compileShader(&vertShaderCode, compiler, vertShaderSource, "ui.shader.vert", "main", shaderc_shader_kind.shaderc_glsl_vertex_shader);
+		Status err4 = compileShader(&fragShaderCode, compiler, fragShaderSource, "ui.shader.frag", "main", shaderc_shader_kind.shaderc_glsl_fragment_shader);
 
 		@static auto zone3 = TracyLoc(null, "shaderc_compiler_release", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx3 = tracy_emit_zone_begin(&zone3, TRACY_ON);
 		shaderc_compiler_release(compiler);
@@ -1121,8 +1143,8 @@ struct Client
 		vertexInputInfo.vertexBindingDescriptionCount = 0;
 		vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
-		VkVertexInputBindingDescription bindingDescription = Vertex.getBindingDescription();
-		auto attributeDescriptions = Vertex.getAttributeDescriptions();
+		VkVertexInputBindingDescription bindingDescription = UiVertex.getBindingDescription();
+		auto attributeDescriptions = UiVertex.getAttributeDescriptions();
 
 		vertexInputInfo.vertexBindingDescriptionCount = 1;
 		vertexInputInfo.vertexAttributeDescriptionCount = cast(u32)attributeDescriptions.length;
@@ -1164,19 +1186,26 @@ struct Client
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
 
-		VkPipelineColorBlendAttachmentState colorBlendAttachment;
-		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-		colorBlendAttachment.blendEnable = VK_FALSE;
+		auto colorBlendAttachment = VkPipelineColorBlendAttachmentState(
+			blendEnable : true,
+			srcColorBlendFactor : VK_BLEND_FACTOR_SRC_ALPHA,
+			dstColorBlendFactor : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			colorBlendOp        : VK_BLEND_OP_ADD,
+			srcAlphaBlendFactor : VK_BLEND_FACTOR_SRC_ALPHA,
+			dstAlphaBlendFactor : VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+			alphaBlendOp        : VK_BLEND_OP_ADD,
+			colorWriteMask      : VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+		);
 
 		VkPipelineColorBlendStateCreateInfo colorBlending;
 		colorBlending.logicOpEnable = VK_FALSE;
 		colorBlending.logicOp = VK_LOGIC_OP_COPY;
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
-		colorBlending.blendConstants[0] = 0.0;
-		colorBlending.blendConstants[1] = 0.0;
-		colorBlending.blendConstants[2] = 0.0;
-		colorBlending.blendConstants[3] = 0.0;
+		colorBlending.blendConstants[0] = 1.0;
+		colorBlending.blendConstants[1] = 1.0;
+		colorBlending.blendConstants[2] = 1.0;
+		colorBlending.blendConstants[3] = 1.0;
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo;
 		pipelineLayoutInfo.setLayoutCount = 1;
@@ -1382,6 +1411,11 @@ struct Client
 			return Status.ERR;
 		}
 
+		u8[] fileData;
+		Status err = readFile("../plugins/hello_triangle/res/font_14.txt", &fileData);
+		println("file\n", fileData);
+		freeArray[u8](fileData);
+
 		if (createOrResizeStagingBuffer(&vkcontext.stagingBuffer, fontImage.byteLength) != OK) {
 			tracy_emit_zone_end(ctx);
 			return Status.ERR;
@@ -1413,13 +1447,13 @@ struct Client
 
 		VkSamplerCreateInfo samplerInfo;
 		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		samplerInfo.magFilter = VK_FILTER_LINEAR;
-		samplerInfo.minFilter = VK_FILTER_LINEAR;
+		samplerInfo.magFilter = VK_FILTER_NEAREST;
+		samplerInfo.minFilter = VK_FILTER_NEAREST;
 		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-		samplerInfo.anisotropyEnable = VK_TRUE;
-		samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+		samplerInfo.anisotropyEnable = false;
+		samplerInfo.maxAnisotropy = 1;
 		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 		samplerInfo.unnormalizedCoordinates = VK_FALSE;
 		samplerInfo.compareEnable = VK_FALSE;
@@ -1460,12 +1494,16 @@ struct Client
 
 	Status createUniformBuffers() {
 		@static auto zone = TracyLoc(null, "Client.createUniformBuffers", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
-		VkDeviceSize bufferSize = UniformBufferObject.sizeof;
 		for (u64 i = 0; i < vkcontext.NUM_FRAMES; ++i) {
-			auto frame = &vkcontext.frames[i];
-			createOrResizeBarBuffer(&frame.uniformBuffer, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+			createFrameUbos(&vkcontext.frames[i]);
 		}
 		tracy_emit_zone_end(ctx);
+		return Status.OK;
+	}
+
+	Status createFrameUbos(FrameData* frame) {
+		//createOrResizeBarBuffer(&frame.uniformBuffer, SceneUbo.sizeof, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+		createOrResizeBarBuffer(&frame.uniformBuffer, UiUbo.sizeof, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 		return Status.OK;
 	}
 
@@ -1513,7 +1551,8 @@ struct Client
 			VkDescriptorBufferInfo bufferInfo;
 			bufferInfo.buffer = frame.uniformBuffer.buffer;
 			bufferInfo.offset = 0;
-			bufferInfo.range = UniformBufferObject.sizeof;
+			//bufferInfo.range = SceneUbo.sizeof;
+			bufferInfo.range = UiUbo.sizeof;
 
 			descriptorWrites[0].dstSet = descriptorSets[i];
 			descriptorWrites[0].dstBinding = 0;
@@ -1609,6 +1648,7 @@ struct Client
 		@static auto zone = TracyLoc(null, "Client.createOrResizeBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
 		VkDeviceSize allocSize = nextPOT[VkDeviceSize](newSize);
+		//println("new size ", newSize, " allocSize ", allocSize, " old buf size ", buffer.size);
 		if (buffer.size >= allocSize) {
 			tracy_emit_zone_end(ctx);
 			return Status.OK;
@@ -1626,9 +1666,15 @@ struct Client
 		allocCreateInfo.flags = flags;
 		allocCreateInfo.priority = 0.0;
 
+		auto oldSize = buffer.size;
+		auto oldBuf = buffer.buffer;
+
 		VmaAllocationInfo allocInfo;
 		vmaCreateBuffer(vkcontext.vkallocator, &bufCreateInfo, &allocCreateInfo, &buffer.buffer, &buffer.allocation, &allocInfo);
-		buffer.size = allocInfo.size;
+		buffer.size = allocSize;
+
+		//println("alloc ", oldBuf, " size ", oldSize, " -> ", buffer.buffer, " size ", buffer.size);
+		//println("allocInfo mem ", allocInfo.deviceMemory, " offset ", allocInfo.offset, " size ", allocInfo.size, " name ", allocInfo.pName.fromStringz);
 
 		//VkMemoryPropertyFlags memPropFlags = vkcontext.memProperties.memoryTypes[allocInfo.memoryType].propertyFlags;
 		//print("Alloced buf: offset ", allocInfo.offset, " size ", allocInfo.size);
@@ -1673,6 +1719,7 @@ struct Client
 	Status recordCommandBuffer(VkCommandBuffer cmdBuf, u32 imageIndex, FrameData* frame) {
 		@static auto zone = TracyLoc(null, "Client.recordCommandBuffer", "main.vx", cast(u32)__LINE__, 0x000000); auto ctx = tracy_emit_zone_begin(&zone, TRACY_ON);
 
+		//println("byte length ", indicies.byteLength, " length ", indicies.length);
 		createOrResizeBarBuffer(&frame.vertexBuffer, vertices.byteLength, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 		createOrResizeBarBuffer(&frame.indexBuffer,  indicies.byteLength, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
@@ -1788,11 +1835,13 @@ struct Client
 		recordCommandBuffer(frame.commandBuffer, imageIndex, frame);
 
 		// Update uniforms
-		UniformBufferObject ubo;
-		ubo.model = identityMatrix; //rotationMatrixZ(time * degtorad(90));
-		ubo.view = lookAtMatrix(vec3(0, 0, -1), vec3(0, 0, 0), vec3(0, 1, 0));
+		//SceneUbo ubo;
+		//ubo.model = identityMatrix; //rotationMatrixZ(time * degtorad(90));
+		//ubo.view = lookAtMatrix(vec3(0, 0, -1), vec3(0, 0, 0), vec3(0, 1, 0));
 		//ubo.proj = perspectiveMatrix(degtorad(45), cast(f32)vkcontext.swapchain.swapchainExtent.height / vkcontext.swapchain.swapchainExtent.width, 0.1, 10);
-		ubo.proj = perspectiveMatrix(degtorad(90), 1, 0.1, 10);
+		//ubo.proj = perspectiveMatrix(degtorad(90), 1, 0.1, 10);
+		UiUbo ubo;
+		ubo.screenSize = vec2(fbsize.x, fbsize.y);
 		fillHostBuffer(&frame.uniformBuffer, &ubo, ubo.sizeof);
 
 
@@ -1937,11 +1986,7 @@ struct Client
 			tracy_emit_zone_end(ctx);
 			return capabilities.currentExtent;
 		} else {
-			i32 width;
-			i32 height;
-			glfwGetFramebufferSize(window, &width, &height);
-
-			VkExtent2D actualExtent = VkExtent2D(cast(u32)width, cast(u32)height);
+			VkExtent2D actualExtent = VkExtent2D(cast(u32)fbsize.x, cast(u32)fbsize.y);
 
 			actualExtent.width = clamp[u32](actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
 			actualExtent.height = clamp[u32](actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
@@ -1998,14 +2043,27 @@ struct Client
 
 	void onMouseClick(int button, int action, int mods, f32 x, f32 y) {
 		if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-			putQuadAt(vec3(x*2-1, y*2-1, 0));
+			putQuadAt(vec2(x, y));
 		}
 	}
 
 	void onFramebufferResize(i32 width, i32 height)
 	{
 		//println("Resized to ", width, " ", height);
+		fbsize.x = width;
+		fbsize.y = height;
 		framebufferResized = true;
+	}
+
+	void onContentScale(f32 xscale, f32 yscale)
+	{
+		println("Rescale to ", xscale, " ", yscale);
+	}
+
+	void onRefresh()
+	{
+		//println("onRefresh");
+		frame();
 	}
 }
 
@@ -2089,16 +2147,53 @@ struct Color {
 	u8 a = 255;
 }
 
-struct Vertex
+struct UiVertex
 {
-	vec3 pos;
+	vec2 pos;
+	u16vec2 texCoord;
 	Color color;
-	vec2 texCoord;
 
 	@static VkVertexInputBindingDescription getBindingDescription() {
 		VkVertexInputBindingDescription bindingDescription;
 		bindingDescription.binding = 0;
-		bindingDescription.stride = cast(u32)Vertex.sizeof;
+		bindingDescription.stride = cast(u32)UiVertex.sizeof;
+		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+		return bindingDescription;
+	}
+
+	@static VkVertexInputAttributeDescription[3] getAttributeDescriptions() {
+		VkVertexInputAttributeDescription[3] attributeDescriptions;
+
+		attributeDescriptions[0].binding = 0;
+		attributeDescriptions[0].location = 0;
+		attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[0].offset = cast(u32)UiVertex.pos.offsetof;
+
+		attributeDescriptions[1].binding = 0;
+		attributeDescriptions[1].location = 1;
+		attributeDescriptions[1].format = VK_FORMAT_R16G16_USCALED;
+		attributeDescriptions[1].offset = cast(u32)UiVertex.texCoord.offsetof;
+
+		attributeDescriptions[2].binding = 0;
+		attributeDescriptions[2].location = 2;
+		attributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+		attributeDescriptions[2].offset = cast(u32)UiVertex.color.offsetof;
+
+		return attributeDescriptions;
+	}
+}
+
+struct Vertex3d
+{
+	vec3 pos;
+	vec2 texCoord;
+	Color color;
+
+	@static VkVertexInputBindingDescription getBindingDescription() {
+		VkVertexInputBindingDescription bindingDescription;
+		bindingDescription.binding = 0;
+		bindingDescription.stride = cast(u32)Vertex3d.sizeof;
 		bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 		return bindingDescription;
@@ -2110,26 +2205,30 @@ struct Vertex
 		attributeDescriptions[0].binding = 0;
 		attributeDescriptions[0].location = 0;
 		attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[0].offset = cast(u32)Vertex.pos.offsetof;
+		attributeDescriptions[0].offset = cast(u32)UiVertex.pos.offsetof;
 
 		attributeDescriptions[1].binding = 0;
-		attributeDescriptions[1].location = 1;
-		attributeDescriptions[1].format = VK_FORMAT_R8G8B8A8_UNORM;
-		attributeDescriptions[1].offset = cast(u32)Vertex.color.offsetof;
+		attributeDescriptions[1].location = 2;
+		attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+		attributeDescriptions[1].offset = cast(u32)UiVertex.texCoord.offsetof;
 
 		attributeDescriptions[2].binding = 0;
-		attributeDescriptions[2].location = 2;
-		attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-		attributeDescriptions[2].offset = cast(u32)Vertex.texCoord.offsetof;
+		attributeDescriptions[2].location = 1;
+		attributeDescriptions[2].format = VK_FORMAT_R8G8B8A8_UNORM;
+		attributeDescriptions[2].offset = cast(u32)UiVertex.color.offsetof;
 
 		return attributeDescriptions;
 	}
 }
 
-struct UniformBufferObject {
+struct SceneUbo {
 	mat4 model;
 	mat4 view;
 	mat4 proj;
+}
+
+struct UiUbo {
+	vec2 screenSize;
 }
 
 struct AllocatedBuffer {

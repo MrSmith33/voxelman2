@@ -3,7 +3,10 @@ module core.vector;
 import core.math;
 import core.utils;
 
+struct ivec2 { i32 x; i32 y; }
 struct uvec2 { u32 x; u32 y; }
+struct u16vec2 { u16 x; u16 y; }
+
 struct vec2 { f32 x; f32 y; }
 struct vec3 { f32 x; f32 y; f32 z; }
 struct vec3x { f32 x; f32 y; f32 z; f32 pad; }
@@ -16,16 +19,22 @@ f32 degtorad(f32 deg) {
 }
 
 vec3 cross_vec3(vec3 a, vec3 b) {
-	return vec3 (
+	return vec3(
 		(a.y * b.z) - (a.z * b.y),
 		(a.z * b.x) - (a.x * b.z),
 		(a.x * b.y) - (a.y * b.x),
 	);
 }
 
+vec2 add_vec2(vec2 a, vec2 b) {
+	return vec2(
+		a.x + b.x,
+		a.y + b.y,
+	);
+}
+
 vec3 add_vec3(vec3 a, vec3 b) {
-	return vec3
-	(
+	return vec3(
 		a.x + b.x,
 		a.y + b.y,
 		a.z + b.z,
@@ -33,8 +42,7 @@ vec3 add_vec3(vec3 a, vec3 b) {
 }
 
 vec3 sub_vec3(vec3 a, vec3 b) {
-	return vec3
-	(
+	return vec3(
 		a.x - b.x,
 		a.y - b.y,
 		a.z - b.z,
