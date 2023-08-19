@@ -1,5 +1,6 @@
 module core.vector;
 
+import core.format;
 import core.math;
 import core.utils;
 
@@ -115,18 +116,18 @@ mat4 identityMatrix()
 }
 
 void print_mat4(mat4 m) {
-	println("(", m[ 0], " ", m[ 1], " ", m[ 2], " ", m[ 3]);
-	println(" ", m[ 4], " ", m[ 5], " ", m[ 6], " ", m[ 7]);
-	println(" ", m[ 8], " ", m[ 9], " ", m[10], " ", m[11]);
-	println(" ", m[12], " ", m[13], " ", m[14], " ", m[15], ")");
+	writeln("(", m[ 0], " ", m[ 1], " ", m[ 2], " ", m[ 3]);
+	writeln(" ", m[ 4], " ", m[ 5], " ", m[ 6], " ", m[ 7]);
+	writeln(" ", m[ 8], " ", m[ 9], " ", m[10], " ", m[11]);
+	writeln(" ", m[12], " ", m[13], " ", m[14], " ", m[15], ")");
 }
 
 void print_vec3(vec3 v) {
-	println("(", v.x, " ", v.y, " ", v.z, ")");
+	writeln("(", v.x, " ", v.y, " ", v.z, ")");
 }
 
 void print_vec4(vec4 v) {
-	println("(", v.x, " ", v.y, " ", v.z, " ", v.w, ")");
+	writeln("(", v.x, " ", v.y, " ", v.z, " ", v.w, ")");
 }
 
 // up is the direction of cameras +Y axis
@@ -168,7 +169,7 @@ mat4 lookAtMatrix(vec3 camera_pos, vec3 target, vec3 up)
 	//print_vec3(x_axis);
 	//print_vec3(y_axis);
 	//print_vec3(z_axis);
-	//println;
+	//writeln;
 	//print_vec3(camera_pos);
 	//print_vec3(offset);
 

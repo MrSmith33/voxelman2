@@ -2,6 +2,23 @@ module core.format;
 
 import core.kernel32;
 
+void write[Args...](Args... args) {
+	FormatSpec spec;
+	#foreach(i, arg; args) {
+		alias func = selectPrintFunc(Args[i]);
+		func(&writeString, arg, spec);
+	}
+}
+
+void writeln[Args...](Args... args) {
+	FormatSpec spec;
+	#foreach(i, arg; args) {
+		alias func = selectPrintFunc(Args[i]);
+		func(&writeString, arg, spec);
+	}
+	writeString("\n");
+}
+
 void writefln[Args...](u8[] fmt, Args... args) {
 	formattedWrite(&writeString, fmt, args);
 	writeString("\n");
