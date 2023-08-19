@@ -1,0 +1,350 @@
+module core.format;
+
+import core.kernel32;
+
+void writefln[Args...](u8[] fmt, Args... args) {
+	formattedWrite(&writeString, fmt, args);
+	writeString("\n");
+}
+
+void writef[Args...](u8[] fmt, Args... args) {
+	formattedWrite(&writeString, fmt, args);
+}
+
+noreturn panic[Args...](u8[] fmt, Args... args, u64 line = __LINE__, u8[] file = __FILE__) {
+	panicImpl(line, file, fmt, args);
+}
+noreturn panicImpl[Args...](u64 line, u8[] file, u8[] fmt, Args... args) {
+	writefln("Panic at %s:%s", file, line);
+	writefln(fmt, args);
+	ExitProcess(1);
+}
+
+alias SinkDelegate = void function(u8[]);
+
+void formattedWriteln[Args...](SinkDelegate sink, u8[] fmt, Args... args) {
+	formattedWrite(sink, fmt, args);
+	sink("\n");
+}
+
+void formattedWrite[Args...](SinkDelegate sink, u8[] fmt, Args... args) {
+	u32 cursor = 0;
+	#foreach(i, arg; args) {
+		writeLiteral(sink, fmt, &cursor);
+		FormatSpec spec = consumeSpec(cast(u32)i, fmt, &cursor);
+		alias func = selectPrintFunc(Args[i]);
+		func(sink, arg, spec);
+	}
+	writeLiteral(sink, fmt, &cursor);
+}
+
+void writeLiteral(SinkDelegate sink, u8[] fmt, u32* cursorPtr) {
+	u32 start = (*cursorPtr);
+	while (true)
+	{
+		if (*cursorPtr >= fmt.length)
+			break;
+		if (fmt[*cursorPtr] == '%')
+		{
+			if (*cursorPtr + 1 >= fmt.length)
+				panic("Invalid format string. End of string after %%");
+			// peek char after %
+			if (fmt[*cursorPtr + 1] != '%')
+				break; // this is a format item
+			// consume first % to write it
+			++(*cursorPtr);
+			// write literal including first %
+			sink(fmt[start .. *cursorPtr]);
+			// start after second %
+			start = *cursorPtr + 1;
+			// cursor is incremented after if
+		}
+		++(*cursorPtr); // skip literal
+	}
+	if (*cursorPtr - start)
+		sink(fmt[start .. *cursorPtr]);
+}
+
+FormatSpec consumeSpec(u32 argIndex, u8[] fmt, u32* cursorPtr) {
+	FormatSpec spec;
+
+	if ((*cursorPtr) >= fmt.length)
+		panic("Invalid format string. Missing %%");
+
+	++(*cursorPtr); // skip %
+
+	if ((*cursorPtr) >= fmt.length)
+		panic("Invalid format string. End of input after %%");
+
+	// flags
+	while (true) {
+		if ((*cursorPtr) >= fmt.length)
+			panic("Invalid format string. Format item ended with end of string");
+
+		switch(fmt[(*cursorPtr)]) {
+			'-' { spec.flags |= FormatSpecFlags.dash;  }
+			'+' { spec.flags |= FormatSpecFlags.plus;  }
+			'#' { spec.flags |= FormatSpecFlags.hash;  }
+			'0' { spec.flags |= FormatSpecFlags.zero;  }
+			' ' { spec.flags |= FormatSpecFlags.space; }
+			else { break; } // while
+		}
+
+		++(*cursorPtr);
+	}
+
+	u32 width;
+	while ('0' <= fmt[(*cursorPtr)] && fmt[(*cursorPtr)] <= '9') {
+		if ((*cursorPtr) >= fmt.length)
+			panic("Invalid format string. Format item ended with end of string");
+
+		width = width * 10 + (fmt[(*cursorPtr)] - '0');
+
+		if (width > 64)
+			panic("Invalid format string. Max width is 64");
+
+		++(*cursorPtr);
+	}
+	spec.width = cast(u8)width;
+
+	// format char
+	if ((*cursorPtr) >= fmt.length)
+		panic("Invalid format string. Format item ended with end of string");
+
+	u8 c = fmt[(*cursorPtr)];
+	if ('a' <= c && c <= 'z' || 'A' <= c && c <= 'Z') {
+		spec.spec = c;
+		++(*cursorPtr);
+	} else {
+		panic("Invalid format string. Expected format char at the end. Got `%s`", c);
+	}
+
+	return spec;
+}
+
+void formatValue[T](SinkDelegate sink, T val, FormatSpec spec = FormatSpec()) {
+	selectFormatter[T](sink, val, spec);
+}
+
+$alias selectPrintFunc($type T) {
+	if ($isInteger(T)) {
+		if (T == u8 || T == u16 || T == u32 || T == u64) return format_u64;
+		return format_i64;
+	}
+	if (T == f32) return format_f32;
+	if (T == f64) return format_f64;
+	if ($isSlice(T)) return formatString;
+	if ($isPointer(T)) return formatPointer;
+	if (T == bool) return formatBool;
+	$compileError("selectPrintFunc: Invalid type");
+}
+
+void formatNull(SinkDelegate sink, FormatSpec spec) #inline {
+	sink("null");
+}
+
+void formatString(SinkDelegate sink, u8[] val, FormatSpec spec) {
+	sink(val);
+}
+
+void formatChar(SinkDelegate sink, u8 val, FormatSpec spec) {
+	u8[1] buf;
+	buf[0] = val;
+	sink(buf);
+}
+
+void formatArray[T](SinkDelegate sink, T val, FormatSpec spec) {
+	sink("[");
+	for(u64 i = 0; i < val.length; ++i)
+	{
+		if (i > 0) sink(", ");
+		formatValue(sink, val[i]);
+	}
+	sink("]");
+}
+
+void formatBool(SinkDelegate sink, bool val, FormatSpec spec) #inline {
+	if (val) sink("true");
+	else sink("false");
+}
+
+enum u64 INT_BUF_SIZE = 66;
+enum u64 FLT_BUF_SIZE = INT_BUF_SIZE*2+1;
+
+struct FormatSpec {
+	u8 spec = 's';
+	u8 width;
+	u8 flags;
+	u8 pad;
+
+	bool hasDash()  { return cast(bool)(flags & FormatSpecFlags.dash); }
+	bool hasZero()  { return cast(bool)(flags & FormatSpecFlags.zero); }
+	bool hasSpace() { return cast(bool)(flags & FormatSpecFlags.space); }
+	bool hasPlus()  { return cast(bool)(flags & FormatSpecFlags.plus); }
+	bool hasHash()  { return cast(bool)(flags & FormatSpecFlags.hash); }
+}
+
+enum FormatSpecFlags : u8 {
+	dash   = 1 << 0,
+	zero   = 1 << 1,
+	space  = 1 << 2,
+	plus   = 1 << 3,
+	hash   = 1 << 4,
+}
+
+u8[] hexDigitsLower  = "0123456789abcdef";
+u8[] hexDigitsUpper  = "0123456789ABCDEF";
+u8[] maxNegative_i64 = "9223372036854775808";
+
+void formatPointer(SinkDelegate sink, void* ptr, FormatSpec spec) {
+	if (ptr == null) {
+		sink("null");
+		return;
+	}
+	sink("0x");
+	u8[INT_BUF_SIZE] buf;
+	u32 numDigits = formatHex(buf.ptr, cast(u64)ptr, hexDigitsUpper.ptr);
+	sink(buf[buf.length-numDigits..buf.length]);
+}
+
+void format_i64(SinkDelegate sink, i64 i, FormatSpec spec) {
+	format_i64_impl(sink, cast(u64)i, spec, true);
+}
+
+void format_u64(SinkDelegate sink, u64 i, FormatSpec spec) {
+	format_i64_impl(sink, i, spec, false);
+}
+
+void format_i64_impl(SinkDelegate sink, u64 i, FormatSpec spec, bool signed) {
+	u8[INT_BUF_SIZE] buf;
+	u32 numDigits;
+
+	u8 padding = ' ';
+
+	if (spec.hasSpace) padding = ' ';
+	if (spec.hasZero) padding = '0';
+
+	if (i == 0) {
+		buf[buf.length-1] = '0';
+		numDigits = 1;
+	} else switch (spec.spec) {
+		'b'  { numDigits = formatBinary(buf.ptr, i); }
+		'x'  { numDigits = formatHex(buf.ptr, i, hexDigitsLower.ptr); }
+		'X'  { numDigits = formatHex(buf.ptr, i, hexDigitsUpper.ptr); }
+		else { numDigits = formatDecimal(buf.ptr, cast(i64)i, signed); }
+	}
+
+	while (spec.width > numDigits) {
+		buf[buf.length - ++numDigits] = padding;
+	}
+
+	sink(buf[buf.length-numDigits..buf.length]);
+}
+
+void format_f32(SinkDelegate sink, f32 f, FormatSpec spec) {
+	u8[FLT_BUF_SIZE] buf;
+	u32 numDigits = formatFloat(buf.ptr, f);
+	sink(buf[buf.length-numDigits..buf.length]);
+}
+
+void format_f64(SinkDelegate sink, f64 f, FormatSpec spec) {
+	u8[FLT_BUF_SIZE] buf;
+	u32 numDigits = formatFloat(buf.ptr, f);
+	sink(buf[buf.length-numDigits..buf.length]);
+}
+
+// nonzero
+u32 formatHex(u8* /*INT_BUF_SIZE*/ sink, u64 i, u8* /*u8[16]*/ chars) {
+	u32 numDigits = 0;
+	while (i) {
+		sink[INT_BUF_SIZE - ++numDigits] = chars[i & 0xF];
+		i >>= 4;
+	}
+	return numDigits;
+}
+
+// nonzero
+u32 formatBinary(u8* /*INT_BUF_SIZE*/ sink, u64 u) {
+	u32 numDigits = 0;
+	while (true) {
+		u8 c = cast(u8)('0' + (u & 1));
+		sink[INT_BUF_SIZE - ++numDigits] = c;
+		u >>= 1;
+		if (u == 0) break;
+	}
+	return numDigits;
+}
+
+u32 formatDecimalUnsigned(u8* /*INT_BUF_SIZE*/ sink, u64 u) {
+	u32 numDigits = 0;
+	while (true) {
+		u8 c = cast(u8)('0' + (u % 10));
+		sink[INT_BUF_SIZE - ++numDigits] = c;
+		u /= 10;
+		if (u == 0) break;
+	}
+	return numDigits;
+}
+
+u32 formatDecimal(u8* /*INT_BUF_SIZE*/ sink, i64 i, bool signed) {
+	u32 numDigits = 0;
+	u64 u = cast(u64)i;
+	if (signed && i < 0) { u = cast(u64)(-i); }
+	while (true) {
+		u8 c = cast(u8)('0' + (u % 10));
+		sink[INT_BUF_SIZE - ++numDigits] = c;
+		u /= 10;
+		if (u == 0) break;
+	}
+	if (signed && i < 0) { sink[INT_BUF_SIZE - ++numDigits] = '-'; }
+	return numDigits;
+}
+
+enum FP_PRECISION = 6;
+
+u32 formatFloat(u8* /*FLT_BUF_SIZE*/ sink, f64 originalFloat) {
+	f64 f = originalFloat;
+	if (originalFloat < 0) f = -f;
+	i64 ipart = cast(i64)(f + 0.00000001);
+	f64 frac = f - ipart;
+	if (frac < 0) frac = -frac;
+
+	i64 ndigits = 0;
+	i64 nzeroes = -1;
+
+	while (frac - cast(i64)(frac) >= 0.0000001 && frac - cast(i64)(frac) <= 0.9999999 && ndigits < FP_PRECISION) {
+		if (cast(i64)(frac) == 0) nzeroes++;
+		ndigits++;
+		frac *= 10;
+	}
+	if (frac - cast(i64)(frac) > 0.9999999) frac++;
+
+	u8* bufPtr = sink + INT_BUF_SIZE + 1;
+	u32 numDigits = formatDecimalUnsigned(bufPtr, cast(u64)(frac));
+	while (nzeroes) {
+		sink[FLT_BUF_SIZE - ++numDigits] = '0';
+		--nzeroes;
+	}
+
+	sink[FLT_BUF_SIZE - ++numDigits] = '.';
+
+	u8* bufPtr2 = sink + (FLT_BUF_SIZE - numDigits - INT_BUF_SIZE);
+	numDigits += formatDecimalUnsigned(bufPtr2, cast(u64)ipart);
+
+	if (originalFloat < 0) {
+		sink[FLT_BUF_SIZE - ++numDigits] = '-';
+	}
+
+	return numDigits;
+}
+
+void writeString(u8[] str) {
+	void* handle = GetStdHandle(STD_OUTPUT_HANDLE);
+	u32 numWritten;
+	WriteFile(
+		handle,
+		cast(u8*)str.ptr,
+		cast(u32)str.length,
+		&numWritten,
+		null);
+}
