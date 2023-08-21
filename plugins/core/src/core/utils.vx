@@ -70,8 +70,6 @@ struct Duration
 	i64 ticks;
 
 	f64 seconds() {
-		i64 freq;
-		QueryPerformanceFrequency(&freq);
 		return ticks / cast(f64)(_ticksPerSecond);
 	}
 }
